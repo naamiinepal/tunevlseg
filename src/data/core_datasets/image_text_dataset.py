@@ -36,7 +36,7 @@ class ImageTextDataset(Dataset):
 
         with open(task_path) as fp:
             self.tasks: List[Mapping[str, Union[str, PromptMappingType]]] = json.load(
-                fp
+                fp,
             )
 
     def __getitem__(self, index: int):
@@ -78,6 +78,7 @@ class ImageTextDataset(Dataset):
         img = cv2.imread(str(img_path))
 
         if img is None:
-            raise ValueError("Image is not found in the directory: ", img_path)
+            msg = "Image is not found in the directory: "
+            raise ValueError(msg, img_path)
 
         return img

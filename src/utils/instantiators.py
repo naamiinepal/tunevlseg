@@ -23,9 +23,10 @@ def instantiate_callbacks(callbacks_cfg: DictConfig) -> List[Callback]:
         return callbacks
 
     if not isinstance(callbacks_cfg, DictConfig):
-        raise TypeError("Callbacks config must be a DictConfig!")
+        msg = "Callbacks config must be a DictConfig!"
+        raise TypeError(msg)
 
-    for _, cb_conf in callbacks_cfg.items():
+    for cb_conf in callbacks_cfg.values():
         if isinstance(cb_conf, DictConfig) and "_target_" in cb_conf:
             log.info(f"Instantiating callback <{cb_conf._target_}>")
             callbacks.append(hydra.utils.instantiate(cb_conf))
@@ -46,9 +47,10 @@ def instantiate_loggers(logger_cfg: DictConfig) -> List[Logger]:
         return logger
 
     if not isinstance(logger_cfg, DictConfig):
-        raise TypeError("Logger config must be a DictConfig!")
+        msg = "Logger config must be a DictConfig!"
+        raise TypeError(msg)
 
-    for _, lg_conf in logger_cfg.items():
+    for lg_conf in logger_cfg.values():
         if isinstance(lg_conf, DictConfig) and "_target_" in lg_conf:
             log.info(f"Instantiating logger <{lg_conf._target_}>")
             logger.append(hydra.utils.instantiate(lg_conf))

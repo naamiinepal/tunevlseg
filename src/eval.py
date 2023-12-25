@@ -1,9 +1,7 @@
-from typing import Any, Dict, List, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Tuple
 
 import hydra
 import rootutils
-from lightning import LightningDataModule, LightningModule, Trainer
-from lightning.pytorch.loggers import Logger
 from omegaconf import DictConfig
 
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
@@ -31,6 +29,10 @@ from src.utils import (
     log_hyperparameters,
     task_wrapper,
 )
+
+if TYPE_CHECKING:
+    from lightning import LightningDataModule, LightningModule, Trainer
+    from lightning.pytorch.loggers import Logger
 
 log = RankedLogger(__name__, rank_zero_only=True)
 

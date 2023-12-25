@@ -1,11 +1,9 @@
-from typing import Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import hydra
 import lightning as L
 import rootutils
-import torch
 from lightning import Callback, LightningDataModule, LightningModule, Trainer
-from lightning.pytorch.loggers import Logger
 from omegaconf import DictConfig
 
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
@@ -35,6 +33,9 @@ from src.utils import (
     log_hyperparameters,
     task_wrapper,
 )
+
+if TYPE_CHECKING:
+    from lightning.pytorch.loggers import Logger
 
 log = RankedLogger(__name__, rank_zero_only=True)
 
@@ -120,12 +121,11 @@ def main(cfg: DictConfig) -> Optional[float]:
     metric_dict, _ = train(cfg)
 
     # safely retrieve metric value for hydra-based hyperparameter optimization
-    metric_value = get_metric_value(
-        metric_dict=metric_dict, metric_name=cfg.get("optimized_metric")
+    return get_metric_value(
+        metric_dict=metric_dict, metric_name=cfg.get("optimized_metric"),
     )
 
     # return optimized metric
-    return metric_value
 
 
 if __name__ == "__main__":

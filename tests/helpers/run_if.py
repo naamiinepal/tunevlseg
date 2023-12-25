@@ -31,7 +31,7 @@ class RunIf:
     Fully compatible with `@pytest.mark`.
 
     Example:
-
+    -------
     ```python
         @RunIf(min_torch="1.8")
         @pytest.mark.parametrize("arg1", [1.0, 2.0])

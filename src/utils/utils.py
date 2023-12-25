@@ -50,6 +50,7 @@ def task_wrapper(task_func: Callable) -> Callable:
         - etc. (adjust depending on your needs)
 
     Example:
+    -------
     ```
     @utils.task_wrapper
     def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
@@ -68,14 +69,14 @@ def task_wrapper(task_func: Callable) -> Callable:
             metric_dict, object_dict = task_func(cfg=cfg)
 
         # things to do if exception occurs
-        except Exception as ex:
+        except Exception:
             # save exception to `.log` file
             log.exception("")
 
             # some hyperparameter combinations might be invalid or cause out-of-memory errors
             # so when using hparam search plugins like Optuna, you might want to disable
             # raising the below exception to avoid multirun failure
-            raise ex
+            raise
 
         # things to always do after either success or exception
         finally:
@@ -107,10 +108,13 @@ def get_metric_value(metric_dict: Dict[str, Any], metric_name: Optional[str]) ->
         return None
 
     if metric_name not in metric_dict:
-        raise Exception(
+        msg = (
             f"Metric value not found! <metric_name={metric_name}>\n"
             "Make sure metric name logged in LightningModule is correct!\n"
             "Make sure `optimized_metric` name in `hparams_search` config is correct!"
+        )
+        raise Exception(
+            msg,
         )
 
     metric_value = metric_dict[metric_name].item()

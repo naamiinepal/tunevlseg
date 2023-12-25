@@ -1,12 +1,12 @@
 # pyright: reportGeneralTypeIssues=false
 from pathlib import Path
-from typing import Any, Mapping, Union, Optional
+from typing import Any, Mapping, Optional, Union
 
 from torch import nn
 from transformers import CLIPVisionModel
 
-from .encoder import TransTextEncoder
 from .decoder import TransDecoder
+from .encoder import TransTextEncoder
 
 StrOrPath = Union[str, Path]
 StrToAny = Mapping[str, Any]
@@ -31,6 +31,7 @@ class TransformerSegmentor(nn.Module):
             The model uses `num_upsampler_layers` upsampling layers on the top of transformer decoder blocks.
 
         Args:
+        ----
             image_pretrained_model_name_or_path: The name to the pretrained model or path to the saved image model
             text_pretrained_model_name_or_path: The name to the pretrained model or path to the saved text model
             freeze_image_encoder: Whether to freeze the image encoder of CLIP. Freezing disables the gradient of `CLIPVisionModel`.
@@ -46,7 +47,7 @@ class TransformerSegmentor(nn.Module):
 
         # Freeze image encoder if needed
         self.image_encoder = CLIPVisionModel.from_pretrained(
-            image_pretrained_model_name_or_path
+            image_pretrained_model_name_or_path,
         ).requires_grad_(not freeze_image_encoder)
 
         img_config = self.image_encoder.config
@@ -83,8 +84,7 @@ class TransformerSegmentor(nn.Module):
         image_last_hidden_state = image_output_obj.last_hidden_state
 
         # shape: (B, num_output_channels, H, W)
-        decoder_output = self.decoder(
-            tgt=image_last_hidden_state, memory=text_proj_output
+        return self.decoder(
+            tgt=image_last_hidden_state, memory=text_proj_output,
         )
 
-        return decoder_output

@@ -76,7 +76,7 @@ class MNISTDataModule(LightningDataModule):
 
         # data transformations
         self.transforms = transforms.Compose(
-            [transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))]
+            [transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))],
         )
 
         self.data_train: Optional[Dataset] = None
@@ -117,15 +117,22 @@ class MNISTDataModule(LightningDataModule):
         # Divide batch size by the number of devices.
         if self.trainer is not None:
             if self.hparams.batch_size % self.trainer.world_size != 0:
+                msg = f"Batch size ({self.hparams.batch_size}) is not divisible by the number of devices ({self.trainer.world_size})."
                 raise RuntimeError(
-                    f"Batch size ({self.hparams.batch_size}) is not divisible by the number of devices ({self.trainer.world_size})."
+                    msg,
                 )
-            self.batch_size_per_device = self.hparams.batch_size // self.trainer.world_size
+            self.batch_size_per_device = (
+                self.hparams.batch_size // self.trainer.world_size
+            )
 
         # load and split datasets only if not loaded already
         if not self.data_train and not self.data_val and not self.data_test:
-            trainset = MNIST(self.hparams.data_dir, train=True, transform=self.transforms)
-            testset = MNIST(self.hparams.data_dir, train=False, transform=self.transforms)
+            trainset = MNIST(
+                self.hparams.data_dir, train=True, transform=self.transforms,
+            )
+            testset = MNIST(
+                self.hparams.data_dir, train=False, transform=self.transforms,
+            )
             dataset = ConcatDataset(datasets=[trainset, testset])
             self.data_train, self.data_val, self.data_test = random_split(
                 dataset=dataset,
@@ -179,7 +186,6 @@ class MNISTDataModule(LightningDataModule):
         :param stage: The stage being torn down. Either `"fit"`, `"validate"`, `"test"`, or `"predict"`.
             Defaults to ``None``.
         """
-        pass
 
     def state_dict(self) -> Dict[Any, Any]:
         """Called when saving a checkpoint. Implement to generate and save the datamodule state.
@@ -194,7 +200,6 @@ class MNISTDataModule(LightningDataModule):
 
         :param state_dict: The datamodule state returned by `self.state_dict()`.
         """
-        pass
 
 
 if __name__ == "__main__":

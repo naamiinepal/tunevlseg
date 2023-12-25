@@ -9,7 +9,7 @@ from src.eval import evaluate
 from src.train import train
 
 
-@pytest.mark.slow
+@pytest.mark.slow()
 def test_train_eval(tmp_path: Path, cfg_train: DictConfig, cfg_eval: DictConfig) -> None:
     """Tests training and evaluation by training for 1 epoch with `train.py` then evaluating with
     `eval.py`.

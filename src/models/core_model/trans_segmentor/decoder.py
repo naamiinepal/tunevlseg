@@ -1,9 +1,9 @@
 # pyright: reportGeneralTypeIssues=false
 import math
-from typing import Any, Mapping, Tuple, Union, Optional
+from typing import Any, Mapping, Optional, Tuple, Union
 
-from torch import nn
 import torch
+from torch import nn
 
 IntorIntTuple = Union[Tuple[int, int], int]
 StrToAny = Mapping[str, Any]
@@ -26,6 +26,7 @@ class TransDecoder(nn.Module):
         It treats the encoded hidden states from vision encoder as the target domain and textual representation as the memory.
 
         Args:
+        ----
             image_hidden_size: The hidden size of the image encoder.
             decoder_layer_kwargs: The keyword arguments to the transformer decoder. `n_head` is the required one.
             num_decoder_layers: The number of transformer decoder layers.
@@ -38,7 +39,7 @@ class TransDecoder(nn.Module):
         super().__init__(*args, **kwargs)
 
         self.transformer_decoder = self.get_trans_decoder(
-            image_hidden_size, decoder_layer_kwargs, num_decoder_layers
+            image_hidden_size, decoder_layer_kwargs, num_decoder_layers,
         )
 
         self.upsampler = self.get_upsampler(
@@ -66,17 +67,17 @@ class TransDecoder(nn.Module):
         hid_img_size = math.isqrt(flat_size)
 
         if (hid_img_size * hid_img_size) != flat_size:
+            msg = "The number of tokens besides the pooled output should be a perfect square."
             raise ValueError(
-                "The number of tokens besides the pooled output should be a perfect square."
+                msg,
             )
 
         # Make the output 4D
         # shape: (B, H_i, sqrt(N_i), sqrt(N_i))
         img_channel_first = channel_first_output.view(B, H, hid_img_size, hid_img_size)
 
-        up_image = self.upsampler(img_channel_first)
+        return self.upsampler(img_channel_first)
 
-        return up_image
 
     @staticmethod
     def get_trans_decoder(
@@ -84,23 +85,25 @@ class TransDecoder(nn.Module):
         decoder_layer_kwargs: StrToAny,
         num_decoder_layers: int,
     ):
-        """Get the transformer decoder
+        """Get the transformer decoder.
 
         Args:
+        ----
             image_hidden_size: The hidden size of the image encoder.
             decoder_layer_kwargs: The keyword arguments to the transformer decoder. `n_head` is the required one.
             num_decoder_layers: The number of transformer decoder layers.
 
         Returns:
+        -------
             The transformer decoder block with `num_decoder_layers` transformer decoder layers.
         """
         decoder_layer = nn.TransformerDecoderLayer(
-            image_hidden_size, **decoder_layer_kwargs, batch_first=True
+            image_hidden_size, **decoder_layer_kwargs, batch_first=True,
         )
         norm = nn.LayerNorm(image_hidden_size)
 
         return nn.TransformerDecoder(
-            decoder_layer=decoder_layer, num_layers=num_decoder_layers, norm=norm
+            decoder_layer=decoder_layer, num_layers=num_decoder_layers, norm=norm,
         )
 
     @staticmethod
@@ -114,6 +117,7 @@ class TransDecoder(nn.Module):
         """Gets the upsampler block to reduce the hidden channels to `num_output_channels` and increase the spatial dimension of output.
 
         Args:
+        ----
             patch_size: The size of the patch. This is the total scale factor for the transformer output.
             num_upsampler_layers: The number of upsample and conv2d blocks to upsample.
             image_hidden_size: The hidden size of the image encoder.
@@ -122,6 +126,7 @@ class TransDecoder(nn.Module):
                 This defaults to `1`  for the binary segmentation task.
 
         Returns:
+        -------
             Get sequential mode with `num_upsampler_layers` upsampler layers.
         """
         up_factor = patch_size ** (1 / num_upsampler_layers)
@@ -141,7 +146,7 @@ class TransDecoder(nn.Module):
                         out_channels=out_channels,
                     ),
                     nn.ReLU(inplace=True),
-                )
+                ),
             )
 
             in_channels = out_channels
@@ -166,9 +171,10 @@ class TransDecoder(nn.Module):
         padding: Union[str, IntorIntTuple] = "same",
         padding_mode: str = "replicate",
     ):
-        """Get the upsample and convolve block
+        """Get the upsample and convolve block.
 
         Args:
+        ----
             in_channels: The number of input channels for convolution.
             out_channels: The number of output channels for convolution.
             size: The image out of the output of the block. You must provide this or `scale_factor`
@@ -180,11 +186,13 @@ class TransDecoder(nn.Module):
             padding_mode: The padding mode to use. One of `zeros`, `reflect`, `replicate` or `circular`. Defaults to `zeros`.
 
         Returns:
+        -------
             Tuple of Upsample and 2D Convolution layers
         """
         if size is None and scale_factor is None:
+            msg = "Either the `size` of the output image or the `scale_factor` must be provided."
             raise ValueError(
-                "Either the `size` of the output image or the `scale_factor` must be provided."
+                msg,
             )
 
         return (

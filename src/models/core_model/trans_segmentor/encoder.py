@@ -18,6 +18,7 @@ class TransTextEncoder(nn.Module):
         """Get the tranformer text encoder with its hidden output projected to image provided dimension.
 
         Args:
+        ----
             pretrained_model_name_or_path: The name to the pretrained model or path to the saved model
             freeze_clip: Whether to freeze the text encoder of CLIP. Freezing disables the gradient of `CLIPTextModel`.
             image_hidden_size: The dimension to project the output of the text encoder.
@@ -27,7 +28,7 @@ class TransTextEncoder(nn.Module):
 
         # Freeze clip model if needed
         self.text_model = CLIPTextModel.from_pretrained(
-            pretrained_model_name_or_path
+            pretrained_model_name_or_path,
         ).requires_grad_(not freeze_clip)
 
         text_hidden_size = self.text_model.config.hidden_size
@@ -46,6 +47,5 @@ class TransTextEncoder(nn.Module):
         text_last_hidden_state = text_output.last_hidden_state
 
         # shape: (B, N_t, H_i)
-        image_proj_output = self.proj_layer(text_last_hidden_state)
+        return self.proj_layer(text_last_hidden_state)
 
-        return image_proj_output
