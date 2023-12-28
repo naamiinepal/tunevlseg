@@ -31,8 +31,8 @@ from src.utils import (
 )
 
 if TYPE_CHECKING:
-    from lightning import LightningDataModule, LightningModule, Trainer
-    from lightning.pytorch.loggers import Logger
+    from pytorch_lightning import LightningDataModule, LightningModule, Trainer
+    from pytorch_lightning.loggers import Logger
 
 log = RankedLogger(__name__, rank_zero_only=True)
 

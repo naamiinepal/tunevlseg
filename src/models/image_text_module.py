@@ -4,7 +4,7 @@ from typing import Any, Dict, Literal, Mapping, Optional, Tuple, Union
 
 import torch
 import wandb
-from lightning import LightningModule
+from pytorch_lightning import LightningModule
 from torch import nn, optim
 from torchmetrics import Dice, JaccardIndex
 from transformers import AutoTokenizer, PreTrainedTokenizerBase

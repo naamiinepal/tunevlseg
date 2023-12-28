@@ -1,7 +1,7 @@
 # pyright: reportGeneralTypeIssues=false
 from typing import Any, Optional
 
-from lightning import LightningDataModule
+from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader, Dataset
 
 

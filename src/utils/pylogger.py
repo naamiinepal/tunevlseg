@@ -24,7 +24,9 @@ class RankedLogger(logging.LoggerAdapter):
         super().__init__(logger=logger, extra=extra)
         self.rank_zero_only = rank_zero_only
 
-    def log(self, level: int, msg: str, rank: Optional[int] = None, *args, **kwargs) -> None:
+    def log(
+        self, level: int, msg: str, rank: Optional[int] = None, *args, **kwargs
+    ) -> None:
         """Delegate a log call to the underlying logger, after prefixing its message with the rank
         of the process it's being logged from. If `'rank'` is provided, then the log will only
         occur on that rank/process.

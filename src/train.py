@@ -1,9 +1,14 @@
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import hydra
-import lightning as L
 import rootutils
-from lightning import Callback, LightningDataModule, LightningModule, Trainer
+from pytorch_lightning import (
+    Callback,
+    LightningDataModule,
+    LightningModule,
+    Trainer,
+    seed_everything,
+)
 from omegaconf import DictConfig
 
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
@@ -35,7 +40,7 @@ from src.utils import (
 )
 
 if TYPE_CHECKING:
-    from lightning.pytorch.loggers import Logger
+    from pytorch_lightning.loggers import Logger
 
 log = RankedLogger(__name__, rank_zero_only=True)
 
@@ -53,7 +58,7 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     """
     # set seed for random number generators in pytorch, numpy and python.random
     if cfg.get("seed"):
-        L.seed_everything(cfg.seed, workers=True)
+        seed_everything(cfg.seed, workers=True)
 
     log.info(f"Instantiating datamodule <{cfg.data._target_}>")
     datamodule: LightningDataModule = hydra.utils.instantiate(cfg.data)
@@ -68,7 +73,9 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     logger: List[Logger] = instantiate_loggers(cfg.get("logger"))
 
     log.info(f"Instantiating trainer <{cfg.trainer._target_}>")
-    trainer: Trainer = hydra.utils.instantiate(cfg.trainer, callbacks=callbacks, logger=logger)
+    trainer: Trainer = hydra.utils.instantiate(
+        cfg.trainer, callbacks=callbacks, logger=logger
+    )
 
     object_dict = {
         "cfg": cfg,
@@ -122,7 +129,8 @@ def main(cfg: DictConfig) -> Optional[float]:
 
     # safely retrieve metric value for hydra-based hyperparameter optimization
     return get_metric_value(
-        metric_dict=metric_dict, metric_name=cfg.get("optimized_metric"),
+        metric_dict=metric_dict,
+        metric_name=cfg.get("optimized_metric"),
     )
 
     # return optimized metric
