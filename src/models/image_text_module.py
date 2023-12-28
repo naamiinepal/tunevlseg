@@ -1,6 +1,7 @@
 # pyright: reportIncompatibleMethodOverride=false
-from pathlib import Path
-from typing import Any, Dict, Literal, Mapping, Optional, Tuple, Union
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, Literal, Mapping
 
 import torch
 import wandb
@@ -8,6 +9,9 @@ from pytorch_lightning import LightningModule
 from torch import nn, optim
 from torchmetrics import Dice, JaccardIndex
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 BatchType = Mapping[str, Any]
 
@@ -23,7 +27,7 @@ class ImageTextModule(LightningModule):
         loss_fn: nn.Module,
         optimizer: type[optim.optimizer.Optimizer],
         scheduler: type[optim.lr_scheduler.LRScheduler],
-        tokenizer_name_or_path: Union[str, Path],
+        tokenizer_name_or_path: str | Path,
         compile: bool,
         task: Literal["binary", "multiclass", "multilabel"],
         threshold: float = 0.5,
@@ -47,7 +51,7 @@ class ImageTextModule(LightningModule):
         self.scheduler = scheduler
 
         self.tokenizer = AutoTokenizer.from_pretrained(
-            pretrained_model_name_or_path=tokenizer_name_or_path
+            pretrained_model_name_or_path=tokenizer_name_or_path,
         )
 
         # Dice Loggers
@@ -68,8 +72,8 @@ class ImageTextModule(LightningModule):
         return self.net(*args, **kwargs)
 
     def model_step(
-        self, batch: BatchType
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        self, batch: BatchType,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Perform a single model step on a batch of data.
 
         :param batch: A batch of data (a tuple) containing the input tensor of images and target labels.
@@ -122,7 +126,7 @@ class ImageTextModule(LightningModule):
 
         # and the average across the epoch, to the progress bar and logger
         self.log(
-            "train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True
+            "train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True,
         )
 
         # return loss or backpropagation will fail
@@ -131,7 +135,7 @@ class ImageTextModule(LightningModule):
     def on_train_epoch_end(self) -> None:
         # log epoch metric
         self.log_dict(
-            {"train_dice_epoch": self.train_dice, "train_iou_epoch": self.train_iou}
+            {"train_dice_epoch": self.train_dice, "train_iou_epoch": self.train_iou},
         )
 
     def validation_step(self, batch: BatchType, batch_idx: int) -> None:
@@ -166,7 +170,7 @@ class ImageTextModule(LightningModule):
                 text = batch["text"]
 
                 plot_input_ids = self.decode_input_ids(
-                    text.input_ids[: self.hparams.log_image_num]
+                    text.input_ids[: self.hparams.log_image_num],
                 )
 
                 plot_label = map(wandb.Image, targets[: self.hparams.log_image_num])
@@ -174,7 +178,7 @@ class ImageTextModule(LightningModule):
                 data = list(zip(plot_images, plot_input_ids, plot_label))
 
                 self.logger.log_table(
-                    "val_caption_label", columns=self.plot_columns, data=data
+                    "val_caption_label", columns=self.plot_columns, data=data,
                 )
 
                 # Stop logging now
@@ -183,16 +187,16 @@ class ImageTextModule(LightningModule):
     def decode_input_ids(
         self,
         input_ids: torch.Tensor,
-        tokenizer: Optional[PreTrainedTokenizerBase] = None,
+        tokenizer: PreTrainedTokenizerBase | None = None,
     ):
         tokenizer = tokenizer or self.tokenizer
         return tokenizer.batch_decode(
-            input_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True
+            input_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True,
         )
 
     @staticmethod
     def normalize_img(img: torch.Tensor):
-        kwargs = dict(dim=(2, 3), keepdim=True)
+        kwargs = {"dim": (2, 3), "keepdim": True}
 
         img_min = img.amin(**kwargs)
         img_max = img.amax(**kwargs)
@@ -216,7 +220,7 @@ class ImageTextModule(LightningModule):
             prog_bar=True,
         )
 
-    def setup(self, stage: Optional[str]) -> None:
+    def setup(self, stage: str | None) -> None:
         """Lightning hook that is called at the beginning of fit (train + validate), validate,
         test, or predict.
 
@@ -228,7 +232,7 @@ class ImageTextModule(LightningModule):
         if self.hparams.compile and (stage is None or stage == "fit"):
             self.net = torch.compile(self.net)
 
-    def configure_optimizers(self) -> Dict[str, Any]:
+    def configure_optimizers(self) -> dict[str, Any]:
         """Choose what optimizers and learning-rate schedulers to use in your optimization.
         Normally you'd need one. But in the case of GANs or similar you might have multiple.
 
@@ -281,7 +285,7 @@ class ImageTextModule(LightningModule):
                 raise ValueError(msg)
 
             # validate that we considered every parameter
-            param_dict = {pn: p for pn, p in self.named_parameters()}
+            param_dict = dict(self.named_parameters())
 
             extra_params = param_dict.keys() - (decay | no_decay)
             if len(extra_params) == 0:

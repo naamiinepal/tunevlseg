@@ -2,6 +2,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import hydra
 import rootutils
+from omegaconf import DictConfig
 from pytorch_lightning import (
     Callback,
     LightningDataModule,
@@ -9,7 +10,6 @@ from pytorch_lightning import (
     Trainer,
     seed_everything,
 )
-from omegaconf import DictConfig
 
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 # ------------------------------------------------------------------------------------ #
@@ -74,7 +74,7 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
 
     log.info(f"Instantiating trainer <{cfg.trainer._target_}>")
     trainer: Trainer = hydra.utils.instantiate(
-        cfg.trainer, callbacks=callbacks, logger=logger
+        cfg.trainer, callbacks=callbacks, logger=logger,
     )
 
     object_dict = {

@@ -24,14 +24,14 @@ class PhraseCutDataset(Dataset):
         image_dir: StrPath = "images",
         transforms: Optional[Callable] = None,
         return_tensors: Literal["tf", "pt", "np"] = "np",
-    ):
+    ) -> None:
         super().__init__()
 
         data_root = Path(data_root)
 
         with (data_root / task_json_path).open() as f:
             self.tasks: Tuple[Mapping[str, Union[str, PolygonType]], ...] = tuple(
-                json.load(f)
+                json.load(f),
             )
 
         self.image_path = data_root / image_dir
@@ -41,14 +41,14 @@ class PhraseCutDataset(Dataset):
 
         self.transforms = transforms
 
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.tasks)
 
     def __getitem__(self, idx: int):
         task = self.tasks[idx]
 
         image = self.load_image(
-            self.image_path / f"{task['image_id']}.jpg", cv2.IMREAD_COLOR
+            self.image_path / f"{task['image_id']}.jpg", cv2.IMREAD_COLOR,
         )
         # Convert BGR to RGB
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -120,7 +120,7 @@ class PhraseCutDataset(Dataset):
         phrase: str,
         mask: np.ndarray,
         figsize: Tuple[int, int] = (15, 5),
-    ):
+    ) -> None:
         _, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=figsize)
 
         ax1.imshow(PhraseCutDataset.img_normalize(img))
