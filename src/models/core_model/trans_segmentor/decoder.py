@@ -39,7 +39,9 @@ class TransDecoder(nn.Module):
         super().__init__(*args, **kwargs)
 
         self.transformer_decoder = self.get_trans_decoder(
-            image_hidden_size, decoder_layer_kwargs, num_decoder_layers,
+            image_hidden_size,
+            decoder_layer_kwargs,
+            num_decoder_layers,
         )
 
         self.upsampler = self.get_upsampler(
@@ -78,7 +80,6 @@ class TransDecoder(nn.Module):
 
         return self.upsampler(img_channel_first)
 
-
     @staticmethod
     def get_trans_decoder(
         image_hidden_size: int,
@@ -98,12 +99,16 @@ class TransDecoder(nn.Module):
             The transformer decoder block with `num_decoder_layers` transformer decoder layers.
         """
         decoder_layer = nn.TransformerDecoderLayer(
-            image_hidden_size, **decoder_layer_kwargs, batch_first=True,
+            image_hidden_size,
+            **decoder_layer_kwargs,
+            batch_first=True,
         )
         norm = nn.LayerNorm(image_hidden_size)
 
         return nn.TransformerDecoder(
-            decoder_layer=decoder_layer, num_layers=num_decoder_layers, norm=norm,
+            decoder_layer=decoder_layer,
+            num_layers=num_decoder_layers,
+            norm=norm,
         )
 
     @staticmethod

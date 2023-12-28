@@ -48,4 +48,3 @@ class TransTextEncoder(nn.Module):
 
         # shape: (B, N_t, H_i)
         return self.proj_layer(text_last_hidden_state)
-

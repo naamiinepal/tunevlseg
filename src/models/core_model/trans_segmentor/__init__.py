@@ -1,7 +1,9 @@
 # pyright: reportGeneralTypeIssues=false
+from functools import lru_cache
 from pathlib import Path
-from typing import Any, Mapping, Optional, Union
+from typing import Mapping, Optional, Union
 
+import torch
 from torch import nn
 from transformers import CLIPVisionModel
 
@@ -9,7 +11,7 @@ from .decoder import TransDecoder
 from .encoder import TransTextEncoder
 
 StrOrPath = Union[str, Path]
-StrToAny = Mapping[str, Any]
+StrToAny = Mapping[str, torch.Tensor]
 
 
 class TransformerSegmentor(nn.Module):
@@ -19,6 +21,7 @@ class TransformerSegmentor(nn.Module):
         text_pretrained_model_name_or_path: StrOrPath,
         freeze_image_encoder: bool,
         freeze_text_encoder: bool,
+        add_pos_enc: bool,
         decoder_layer_kwargs: StrToAny,
         num_decoder_layers: int,
         num_upsampler_layers: int,
@@ -73,18 +76,73 @@ class TransformerSegmentor(nn.Module):
             num_output_channels=num_output_channels,
         )
 
-    def forward(self, text_input: StrToAny, image_input: StrToAny):
+        self.add_pos_enc_or_identity = (
+            self.get_with_pos_enc if add_pos_enc else nn.Identity()
+        )
+
+    def forward(self, text_input: StrToAny, image_input: torch.Tensor):
         # shape: (B, N_t, H_i)
         text_proj_output = self.text_encoder(**text_input)
 
         # image object with pooled output and hidden states
-        image_output_obj = self.image_encoder(**image_input)
+        image_output_obj = self.image_encoder(image_input)
 
         # shape: (B, N_i, H_i)
         image_last_hidden_state = image_output_obj.last_hidden_state
 
+        # Apply positional encoding, if needed
+        text_with_pos_enc = self.add_pos_enc_or_identity(text_proj_output)
+        image_with_pos_enc = self.add_pos_enc_or_identity(image_last_hidden_state)
+
         # shape: (B, num_output_channels, H, W)
         return self.decoder(
-            tgt=image_last_hidden_state, memory=text_proj_output,
+            tgt=image_with_pos_enc,
+            memory=text_with_pos_enc,
         )
 
+    @staticmethod
+    def get_with_pos_enc(x: torch.Tensor):
+        # Get the number of tokens and hidden size
+        B, N, H = x.shape
+
+        # Get positional encoding
+        posenc = TransformerSegmentor.get_posenc(
+            d_model=H, token_length=N, device=x.device, dtype=x.dtype
+        )
+
+        # Add positional encoding to the input and return it
+        return x + posenc
+
+    @staticmethod
+    @lru_cache()
+    @torch.no_grad()
+    def get_posenc(
+        d_model: int,
+        token_length: int,
+        device: torch.device = None,
+        dtype: torch.dtype = None,
+    ) -> torch.Tensor:
+        if d_model % 2 != 0:
+            raise ValueError(
+                f"Cannot use sin/cos positional encoding with odd dim (got dim={d_model})"
+            )
+
+        # Create a tensor of shape (token_length, d_model)
+        posenc = torch.zeros(token_length, d_model, device=device, dtype=dtype)
+
+        # Create a tensor of shape (token_length, 1)
+        position = torch.arange(token_length, device=device, dtype=dtype).unsqueeze(1)
+
+        # Create a tensor of shape (d_model // 2)
+        mul_term = 1e-4 ** (
+            torch.arange(0, d_model, 2, device=device, dtype=dtype) / d_model
+        )
+
+        # Create a tensor of shape (token_length, d_model // 2)
+        angles = position * mul_term
+
+        # Add sin and cos to the posenc tensor
+        posenc[:, 0::2] = torch.sin(angles)
+        posenc[:, 1::2] = torch.cos(angles)
+
+        return posenc  # (token_length, d_model)
