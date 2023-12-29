@@ -107,7 +107,10 @@ class TransformerSegmentor(nn.Module):
 
         # Get positional encoding
         posenc = TransformerSegmentor.get_posenc(
-            d_model=H, token_length=N, device=x.device, dtype=x.dtype,
+            d_model=H,
+            token_length=N,
+            device=x.device,
+            dtype=x.dtype,
         )
 
         # Add positional encoding to the input and return it

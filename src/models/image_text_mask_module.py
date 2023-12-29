@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 BatchType = Mapping[str, Any]
 
 
-class ImageTextModule(LightningModule):
+class ImageTextMaskModule(LightningModule):
     """Example of a `LightningModule` for Segmentation using Image and Text."""
 
     plot_columns = ["Image", "Caption", "Label"]
@@ -72,7 +72,8 @@ class ImageTextModule(LightningModule):
         return self.net(*args, **kwargs)
 
     def model_step(
-        self, batch: BatchType,
+        self,
+        batch: BatchType,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Perform a single model step on a batch of data.
 
@@ -126,7 +127,12 @@ class ImageTextModule(LightningModule):
 
         # and the average across the epoch, to the progress bar and logger
         self.log(
-            "train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True,
+            "train_loss",
+            loss,
+            on_step=True,
+            on_epoch=True,
+            prog_bar=True,
+            logger=True,
         )
 
         # return loss or backpropagation will fail
@@ -178,7 +184,9 @@ class ImageTextModule(LightningModule):
                 data = list(zip(plot_images, plot_input_ids, plot_label))
 
                 self.logger.log_table(
-                    "val_caption_label", columns=self.plot_columns, data=data,
+                    "val_caption_label",
+                    columns=self.plot_columns,
+                    data=data,
                 )
 
                 # Stop logging now
@@ -191,7 +199,9 @@ class ImageTextModule(LightningModule):
     ):
         tokenizer = tokenizer or self.tokenizer
         return tokenizer.batch_decode(
-            input_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True,
+            input_ids,
+            skip_special_tokens=True,
+            clean_up_tokenization_spaces=True,
         )
 
     @staticmethod
