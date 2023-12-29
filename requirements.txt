@@ -23,5 +23,6 @@ rich            # beautiful text formatting in terminal
 
 # ---------- custom --------- #
 transformers
-opencv-python-headless
 albumentations
+monai
+matplotlib
