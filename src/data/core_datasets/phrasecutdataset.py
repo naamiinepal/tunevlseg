@@ -61,7 +61,13 @@ class PhraseCutDataset(Dataset):
             return_tensors=self.return_tensors,
         )
 
+        # Remove the first dimension
+        text_output = {k:v[0] for k, v in text_output.items()}
+
         mask = self.polygon_to_mat(image.shape[:-1], task["Polygons"])
+
+        # Add the final channel layer to mask
+        mask = mask[..., None]
 
         if self.transforms is not None:
             transformed = self.transforms(image=image, mask=mask)
@@ -106,6 +112,7 @@ class PhraseCutDataset(Dataset):
             raise ValueError(msg)
 
         # Create an empty mask for the polygon
+        # Its type can be either float32 or uint8
         mask = np.zeros(img_size, np.float32)
 
         # Loop to add multiple polygons to the mask
