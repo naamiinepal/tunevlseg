@@ -48,7 +48,8 @@ class PhraseCutDataset(Dataset):
         task = self.tasks[idx]
 
         image = self.load_image(
-            self.image_path / f"{task['image_id']}.jpg", cv2.IMREAD_COLOR,
+            self.image_path / f"{task['image_id']}.jpg",
+            cv2.IMREAD_COLOR,
         )
         # Convert BGR to RGB
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
