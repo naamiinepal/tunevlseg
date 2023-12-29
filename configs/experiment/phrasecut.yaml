@@ -1,0 +1,98 @@
+# @package _global_
+
+# to execute this experiment run:
+# python train.py experiment=example
+
+defaults:
+  - override /data: phrasecut
+  - override /model: trans_seg
+  - override /callbacks: default
+  - override /trainer: default
+  - override /logger: wandb
+  - override /extras: default
+
+# all parameters below will be merged with parameters from default configurations set above
+# this allows you to overwrite only specified parameters
+
+tags: ["image_text_mask", "trans_segmentor", "phrasecut"]
+
+seed: 12345
+
+trainer:
+  min_epochs: 10
+  max_epochs: 1000
+  gradient_clip_val: null
+  accelerator: auto
+  devices: [0]
+  precision: 16-mixed
+
+model:
+  weight_decay: 0.0
+  optimizer:
+    lr: 2.0e-5
+  scheduler:
+    factor: 0.1
+    patience: 5
+  net:
+    freeze_image_encoder: false
+    freeze_text_encoder: false
+    add_pos_enc: false
+    decoder_layer_kwargs:
+      nhead: 8
+      dropout: 0.1
+      norm_first: true
+    num_decoder_layers: 4
+    num_upsampler_layers: 5
+  compile: true
+
+data:
+  batch_size: 32
+
+logger:
+  wandb:
+    project: Transformer Segmentor
+    tags: ${tags}
+    group: "phrasecut"
+  aim:
+    experiment: "phrasecut"
+
+############################
+# Additional parameters    #
+############################
+
+model_pretrained_path: openai/clip-vit-base-patch32
+tokenizer_pretrained_path: ${model_pretrained_path}
+image_pretrained_path: ${model_pretrained_path}
+text_pretrained_path: ${model_pretrained_path}
+
+image_size: 416
+data_root: /mnt/Enterprise/datasets/phrasecut
+
+image_mean: [0.48145466, 0.4578275, 0.40821073]
+image_std: [0.26862954, 0.26130258, 0.27577711] 
+
+# Image pre-processing configs
+train_transforms: 
+  _target_: albumentations.Compose
+  transforms:
+    - _target_: albumentations.Resize
+      height: ${img_size}
+      width: ${img_size}
+    - _target_: albumentations.Normalize
+      mean: ${img_mean}
+      std: ${img_std}
+    - _target_: albumentations.pytorch.ToTensorV2
+
+eval_transforms:
+  _target_: albumentations.Compose
+  transforms:
+    - _target_: albumentations.Resize
+      height: ${img_size}
+      width: ${img_size}
+    - _target_: albumentations.Normalize
+      mean: ${img_mean}
+      std: ${img_std}
+    - _target_: albumentations.pytorch.ToTensorV2
+
+val_transforms: ${eval_transforms}
+test_transforms: ${eval_transforms}
