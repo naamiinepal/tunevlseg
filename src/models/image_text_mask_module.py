@@ -5,10 +5,10 @@ from typing import TYPE_CHECKING, Any, Literal, Mapping
 
 import torch
 import wandb
-from torchvision.transforms import functional as TF
 from pytorch_lightning import LightningModule
 from torch import nn, optim
 from torchmetrics import Dice, JaccardIndex
+from torchvision.transforms import functional as TF
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
 if TYPE_CHECKING:
@@ -86,7 +86,6 @@ class ImageTextMaskModule(LightningModule):
             - A tensor of predictions.
             - A tensor of target labels.
         """
-
         text_input = {k: batch[k] for k in ("input_ids", "attention_mask")}
         img = batch["image"]
 
@@ -187,7 +186,10 @@ class ImageTextMaskModule(LightningModule):
                 self.log_image_caption_mask = False
 
     def get_plot_images(self, images: torch.Tensor):
-        return map(wandb.Image, map(TF.to_pil_image, images[: self.hparams.log_image_num].float()))
+        return map(
+            wandb.Image,
+            map(TF.to_pil_image, images[: self.hparams.log_image_num].float()),
+        )
 
     def decode_input_ids(
         self,

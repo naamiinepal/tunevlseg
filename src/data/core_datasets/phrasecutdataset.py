@@ -62,7 +62,7 @@ class PhraseCutDataset(Dataset):
         )
 
         # Remove the first dimension
-        text_output = {k:v[0] for k, v in text_output.items()}
+        text_output = {k: v[0] for k, v in text_output.items()}
 
         mask = self.polygon_to_mat(image.shape[:-1], task["Polygons"])
 
