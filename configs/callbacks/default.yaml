@@ -5,18 +5,16 @@ defaults:
   - rich_progress_bar
   - _self_
 
-monitor: val_dice
-
 model_checkpoint:
   dirpath: ${paths.output_dir}/checkpoints
   filename: "epoch_{epoch:03d}"
-  monitor: ${monitor}
+  monitor: val_dice
   mode: max
   save_last: true
   auto_insert_metric_name: true
 
 early_stopping:
-  monitor: ${monitor}
+  monitor: val_loss
   patience: 10
   mode: "max"
 

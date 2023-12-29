@@ -1,10 +1,10 @@
-_target_: src.data.BaseDataModule
+_target_: src.data.image_text_mask_datamodule.ImageTextDatamodule
 train_ds:
   _target_: src.data.core_datasets.phrasecutdataset.PhraseCutDataset
   data_root: ${data_root}
   task_json_path: refer_train.json
   tokenizer_pretrained_path: ${tokenizer_pretrained_path}
-  train_transforms: ${train_transforms}
+  transforms: ${train_transforms}
   return_tensors: pt
 
 val_ds:
@@ -12,7 +12,7 @@ val_ds:
   data_root: ${data_root}
   task_json_path: refer_val.json
   tokenizer_pretrained_path: ${tokenizer_pretrained_path}
-  val_transforms: ${val_transforms}
+  transforms: ${val_transforms}
   return_tensors: pt
 
 test_ds:
@@ -20,7 +20,7 @@ test_ds:
   data_root: ${data_root}
   task_json_path: refer_test.json
   tokenizer_pretrained_path: ${tokenizer_pretrained_path}
-  test_transforms: ${test_transforms}
+  transforms: ${test_transforms}
   return_tensors: pt
 
 batch_size: 16

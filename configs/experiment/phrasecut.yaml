@@ -65,11 +65,11 @@ tokenizer_pretrained_path: ${model_pretrained_path}
 image_pretrained_path: ${model_pretrained_path}
 text_pretrained_path: ${model_pretrained_path}
 
-image_size: 416
+img_size: 416
 data_root: /mnt/Enterprise/datasets/phrasecut
 
-image_mean: [0.48145466, 0.4578275, 0.40821073]
-image_std: [0.26862954, 0.26130258, 0.27577711] 
+img_mean: [0.48145466, 0.4578275, 0.40821073]
+img_std: [0.26862954, 0.26130258, 0.27577711] 
 
 # Image pre-processing configs
 train_transforms: 
