@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any, Literal, Mapping
 
 import torch
 import wandb
+from torchvision.transforms import functional as TF
 from pytorch_lightning import LightningModule
 from torch import nn, optim
 from torchmetrics import Dice, JaccardIndex
@@ -31,7 +32,8 @@ class ImageTextMaskModule(LightningModule):
         compile: bool,
         task: Literal["binary", "multiclass", "multilabel"],
         threshold: float = 0.5,
-        weight_decay: float = 0,
+        weight_decay: float = 0.0,
+        log_image_num: int = 8,
     ) -> None:
         """Initialize a `ImageTextModule`.
 
@@ -84,26 +86,18 @@ class ImageTextMaskModule(LightningModule):
             - A tensor of predictions.
             - A tensor of target labels.
         """
-        # batch = {
-        #     "text": text,
-        #     "img": img,
-        #     "mask": mask,
-        #     "img_name": img_name,
-        #     "mask_name": mask_name,
-        #     "img_shape": img.shape,
-        #     "mask_shape": mask.shape,
-        # }
-        text = batch["text"]
-        img = batch["img"]
 
-        logits = self.forward(image_input=img, text_input=text)
+        text_input = {k: batch[k] for k in ("input_ids", "attention_mask")}
+        img = batch["image"]
+
+        logits = self.forward(image_input=img, text_input=text_input)
 
         mask = batch["mask"]
         loss = self.loss_fn(logits, mask)
 
         preds = torch.sigmoid(logits)
 
-        return loss, preds, mask
+        return loss, preds, mask.long()
 
     def training_step(self, batch: BatchType, batch_idx: int) -> torch.Tensor:
         """Perform a single training step on a batch of data from the training set.
@@ -162,24 +156,24 @@ class ImageTextMaskModule(LightningModule):
 
         # Log images only for the first batch
         if self.logger is not None and batch_idx == 0:
-            plot_preds = list(map(wandb.Image, preds[: self.hparams.log_image_num]))
+            plot_preds = self.get_plot_images(preds)
 
-            self.logger.log_image("val_pred", plot_preds)
+            self.logger.log_image("val_pred", list(plot_preds))
 
             if self.log_image_caption_mask:
-                img = batch["img"]
+                img = batch["image"]
 
                 selected_images = img[: self.hparams.log_image_num]
 
-                plot_images = map(wandb.Image, self.normalize_img(selected_images))
+                plot_images = self.get_plot_images(self.normalize_img(selected_images))
 
-                text = batch["text"]
+                input_ids = batch["input_ids"]
 
                 plot_input_ids = self.decode_input_ids(
-                    text.input_ids[: self.hparams.log_image_num],
+                    input_ids[: self.hparams.log_image_num],
                 )
 
-                plot_label = map(wandb.Image, targets[: self.hparams.log_image_num])
+                plot_label = self.get_plot_images(targets)
 
                 data = list(zip(plot_images, plot_input_ids, plot_label))
 
@@ -191,6 +185,9 @@ class ImageTextMaskModule(LightningModule):
 
                 # Stop logging now
                 self.log_image_caption_mask = False
+
+    def get_plot_images(self, images: torch.Tensor):
+        return map(wandb.Image, map(TF.to_pil_image, images[: self.hparams.log_image_num].float()))
 
     def decode_input_ids(
         self,
