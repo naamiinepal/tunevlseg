@@ -13,7 +13,6 @@ net:
     norm_first: true
   num_decoder_layers: 4
   num_upsampler_layers: 5
-  final_image_size: ${img_size}
   num_output_channels: 1
 
 loss_fn:

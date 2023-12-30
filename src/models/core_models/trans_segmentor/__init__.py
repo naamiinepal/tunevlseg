@@ -1,7 +1,7 @@
 # pyright: reportGeneralTypeIssues=false
 from functools import lru_cache
 from pathlib import Path
-from typing import Mapping, Optional, Union
+from typing import Mapping, Union
 
 import torch
 from torch import nn
@@ -25,7 +25,6 @@ class TransformerSegmentor(nn.Module):
         decoder_layer_kwargs: StrToAny,
         num_decoder_layers: int,
         num_upsampler_layers: int,
-        final_image_size: Optional[int] = None,
         num_output_channels: int = 1,
         *args,
         **kwargs,
@@ -63,16 +62,13 @@ class TransformerSegmentor(nn.Module):
             image_hidden_size=image_hidden_size,
         )
 
-        # Use the image size from the image encoder, if not provided explicitly
-        image_size = final_image_size or img_config.image_size
-
         self.decoder = TransDecoder(
             image_hidden_size=image_hidden_size,
             decoder_layer_kwargs=decoder_layer_kwargs,
             num_decoder_layers=num_decoder_layers,
             patch_size=img_config.patch_size,
             num_upsampler_layers=num_upsampler_layers,
-            final_image_size=image_size,
+            final_image_size=img_config.image_size,
             num_output_channels=num_output_channels,
         )
 
