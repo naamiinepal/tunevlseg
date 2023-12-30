@@ -23,8 +23,9 @@ trainer:
   max_epochs: 1000
   gradient_clip_val: null
   accelerator: auto
-  devices: [0]
+  devices: [1]
   precision: 16-mixed
+  val_check_interval: 0.5
 
 model:
   weight_decay: 0.0
@@ -66,7 +67,7 @@ image_pretrained_path: ${model_pretrained_path}
 text_pretrained_path: ${model_pretrained_path}
 
 img_size: 224
-data_root: /mnt/Enterprise/datasets/phrasecut
+data_root: /mnt/Enterprise2/rabin/datasets/phrasecut/
 
 img_mean: [0.48145466, 0.4578275, 0.40821073]
 img_std: [0.26862954, 0.26130258, 0.27577711] 

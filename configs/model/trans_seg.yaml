@@ -31,7 +31,7 @@ scheduler:
   _partial_: true
   mode: min
   factor: 0.1
-  patience: 5
+  patience: 4
 
 tokenizer_name_or_path: ${tokenizer_pretrained_path}
 
