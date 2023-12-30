@@ -6,6 +6,8 @@ train_ds:
   tokenizer_pretrained_path: ${tokenizer_pretrained_path}
   transforms: ${train_transforms}
   return_tensors: pt
+  prompt_method: shuffle+
+  neg_prob: 0.2
 
 val_ds:
   _target_: src.data.core_datasets.phrasecutdataset.PhraseCutDataset
@@ -14,6 +16,8 @@ val_ds:
   tokenizer_pretrained_path: ${tokenizer_pretrained_path}
   transforms: ${val_transforms}
   return_tensors: pt
+  prompt_method: fixed
+  neg_prob: 0
 
 test_ds:
   _target_: src.data.core_datasets.phrasecutdataset.PhraseCutDataset
@@ -22,6 +26,8 @@ test_ds:
   tokenizer_pretrained_path: ${tokenizer_pretrained_path}
   transforms: ${test_transforms}
   return_tensors: pt
+  prompt_method: fixed
+  neg_prob: 0
 
 batch_size: 16
 num_workers: 4
