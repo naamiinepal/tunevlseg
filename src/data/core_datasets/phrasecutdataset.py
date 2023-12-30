@@ -89,7 +89,7 @@ class PhraseCutDataset(Dataset):
                     "a photograph of a {}.",
                     "an image of a {}.",
                     "{}.",
-                )
+                ),
             )
 
         if prompt_method == "shuffle+":
@@ -100,7 +100,7 @@ class PhraseCutDataset(Dataset):
                     "a photo of one {}.",
                     "a bad photo of a {}.",
                     "a photo of the {}.",
-                )
+                ),
             )
 
         return tuple(prompt_format_list)
@@ -120,14 +120,15 @@ class PhraseCutDataset(Dataset):
 
         phrase = task["phrase"]
         new_phrase_or_none = self.get_neg_phrase(
-            curr_phrase=phrase, curr_image_id=image_id
+            curr_phrase=phrase,
+            curr_image_id=image_id,
         )
 
         mask_shape = image.shape[:-1]
         if new_phrase_or_none is not None:
             # Replace phrase and make mask zeros
             phrase = new_phrase_or_none
-            mask = np.zeros((*mask_shape, 1), np.float32)
+            mask = np.zeros(mask_shape, np.float32)
         else:
             # Get polygon from mask if new_phrase is not extracted
             mask = self.polygon_to_mat(mask_shape, task["Polygons"])
