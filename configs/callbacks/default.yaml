@@ -3,6 +3,7 @@ defaults:
   - early_stopping
   - model_summary
   - rich_progress_bar
+  - lr_monitor
   - _self_
 
 model_checkpoint:
@@ -15,8 +16,11 @@ model_checkpoint:
 
 early_stopping:
   monitor: val_loss
-  patience: 10
+  patience: 12
   mode: "max"
 
 model_summary:
   max_depth: -1
+
+lr_monitor:
+  log_momentum: true
