@@ -321,7 +321,7 @@ class ImageTextMaskModule(LightningModule):
                 "optimizer": optimizer,
                 "lr_scheduler": {
                     "scheduler": scheduler,
-                    "monitor": "val/loss",
+                    "monitor": "val_loss",
                     "interval": "epoch",
                     "frequency": 1,
                 },
