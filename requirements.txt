@@ -22,7 +22,8 @@ rich            # beautiful text formatting in terminal
 # sh            # for running bash commands in some tests (linux/macos only)
 
 # ---------- custom --------- #
-transformers
-albumentations
-monai
+transformers>=4.6.0
+albumentations>=1.2.1
+monai>=1.3.0
+ijson
 matplotlib
