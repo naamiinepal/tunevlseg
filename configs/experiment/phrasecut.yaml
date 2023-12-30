@@ -47,7 +47,7 @@ model:
   compile: false # Torch compile works only when CUDA Compat >= 7.0
 
 data:
-  batch_size: 64
+  batch_size: 128
 
 logger:
   wandb:
@@ -89,6 +89,7 @@ train_transforms:
       contrast_limit: 0.1
       brightness_limit: 0.1
       brightness_by_max: false
+      p: 0.2
     - _target_: albumentations.Normalize
       mean: ${img_mean}
       std: ${img_std}
