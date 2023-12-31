@@ -2,7 +2,17 @@
 import random
 from collections import defaultdict
 from pathlib import Path
-from typing import Callable, Iterable, List, Literal, Mapping, Optional, Tuple, Union
+from typing import (
+    Callable,
+    Iterable,
+    List,
+    Literal,
+    Mapping,
+    Optional,
+    Set,
+    Tuple,
+    Union,
+)
 
 import cv2
 import cv2.typing
@@ -17,6 +27,7 @@ StrPath = Union[str, Path]
 PolygonType = Iterable[Iterable[Iterable[Tuple[int, int]]]]
 TaskType = Mapping[str, Union[str, PolygonType]]
 PromptMethodType = Literal["fixed", "shuffle", "shuffle+"]
+Str2SetStr = Mapping[str, Set[str]]
 
 
 class PhraseCutDataset(Dataset):
@@ -29,7 +40,7 @@ class PhraseCutDataset(Dataset):
         transforms: Optional[Callable] = None,
         return_tensors: Optional[Literal["tf", "pt", "np"]] = None,
         prompt_method: PromptMethodType = "fixed",
-        neg_prob: float = 0.0,
+        neg_prob: float = 0,
         neg_sample_tries: int = 1000,
     ) -> None:
         super().__init__()
@@ -38,8 +49,14 @@ class PhraseCutDataset(Dataset):
 
         self.tasks = self.get_tasks(data_root / task_json_path)
 
-        self.phrase2image_ids = self.get_phrase2image_ids()
-        self.unique_phrases = tuple(self.phrase2image_ids)
+        # Needed only for negative sampling and is expensive
+        if neg_prob > 0:
+            self.phrase2image_ids = self.get_phrase2image_ids()
+            self.unique_phrases = tuple(self.phrase2image_ids)
+        else:
+            # For the sake of types, keep them empty
+            self.phrase2image_ids: Str2SetStr = {}
+            self.unique_phrases: Tuple[str, ...] = ()
 
         self.image_path = data_root / image_dir
 
@@ -53,7 +70,7 @@ class PhraseCutDataset(Dataset):
 
         self.prompt_format_choices = self.get_prompt_list(prompt_method)
 
-    def get_phrase2image_ids(self):
+    def get_phrase2image_ids(self) -> Str2SetStr:
         # Map phrase to a list of images
         phrase2image_ids: Mapping[str, List[str]] = defaultdict(list)
 

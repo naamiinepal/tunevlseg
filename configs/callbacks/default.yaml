@@ -20,7 +20,7 @@ early_stopping:
   mode: "max"
 
 model_summary:
-  max_depth: -1
+  max_depth: 5
 
 lr_monitor:
   log_momentum: true
