@@ -14,5 +14,9 @@ task_name: "eval"
 
 tags: ["dev"]
 
+# predict on test set, using best model weights achieved during training
+# lightning chooses best weights based on the metric specified in checkpoint callback
+predict: true
+
 # passing checkpoint path is necessary for evaluation
 ckpt_path: ???
