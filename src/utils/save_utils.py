@@ -23,14 +23,33 @@ def save_predictions(
     output_masks_dir = cfg.get("output_masks_dir")
 
     if output_masks_dir is None:
-        output_masks_dir = "outputs"
-        log.warning(f"Output directory not found. Reverting to {output_masks_dir}")
+        output_masks_dir = "output_masks"
+        log.warning(
+            "`output_masks_dir` was not passed in the config."
+            f"Defaulting to {output_masks_dir}",
+        )
 
     output_masks_dir = Path(output_masks_dir)
 
+    if output_masks_dir.exists():
+        log.warning(
+            f"{output_masks_dir} exists."
+            "The output masks may override the previous ones.",
+        )
+        overwrite_outputs = cfg.get("overwrite_outputs")
+
+        if not overwrite_outputs:
+            log.info(
+                "`overwrite_outputs` was not passed or if passed as False."
+                "So stopping the prediction instead of overwriting.",
+            )
+            return
+
     log.info("Generating prediction masks of test dataset")
     pred_outputs: Iterable[dict] = trainer.predict(
-        model=model, dataloaders=dataloaders, ckpt_path=ckpt_path,
+        model=model,
+        dataloaders=dataloaders,
+        ckpt_path=ckpt_path,
     )  # type: ignore
 
     log.info(f"Saving the generated masks in directory {output_masks_dir}")
