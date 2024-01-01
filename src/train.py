@@ -11,6 +11,9 @@ from pytorch_lightning import (
     seed_everything,
 )
 
+if TYPE_CHECKING:
+    from pytorch_lightning.loggers import Logger
+
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 # ------------------------------------------------------------------------------------ #
 # the setup_root above is equivalent to:
@@ -36,11 +39,9 @@ from src.utils import (  # noqa: E402
     instantiate_callbacks,
     instantiate_loggers,
     log_hyperparameters,
+    save_predictions,
     task_wrapper,
 )
-
-if TYPE_CHECKING:
-    from pytorch_lightning.loggers import Logger
 
 log = RankedLogger(__name__, rank_zero_only=True)
 
@@ -98,14 +99,28 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
 
     train_metrics = trainer.callback_metrics
 
+    ckpt_path: Optional[str] = trainer.checkpoint_callback.best_model_path  # type: ignore
+    if ckpt_path == "":
+        log.warning(
+            "Best ckpt not found! Using current weights for testing and predicting...",
+        )
+        ckpt_path = None
+
     if cfg.get("test"):
         log.info("Starting testing!")
-        ckpt_path = trainer.checkpoint_callback.best_model_path
-        if ckpt_path == "":
-            log.warning("Best ckpt not found! Using current weights for testing...")
-            ckpt_path = None
         trainer.test(model=model, datamodule=datamodule, ckpt_path=ckpt_path)
         log.info(f"Best ckpt path: {ckpt_path}")
+
+    if cfg.get("predict"):
+        log.info("Starting predicting!")
+        save_predictions(
+            cfg=cfg,
+            log=log,
+            trainer=trainer,
+            model=model,
+            dataloaders=datamodule.test_dataloader(),
+            ckpt_path=ckpt_path,
+        )
 
     test_metrics = trainer.callback_metrics
 

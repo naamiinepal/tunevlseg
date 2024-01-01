@@ -27,6 +27,7 @@ from src.utils import (  # noqa: E402
     extras,
     instantiate_loggers,
     log_hyperparameters,
+    save_predictions,
     task_wrapper,
 )
 
@@ -47,8 +48,6 @@ def evaluate(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     :param cfg: DictConfig configuration composed by Hydra.
     :return: Tuple[dict, dict] with metrics and dict with all instantiated objects.
     """
-    assert cfg.ckpt_path
-
     log.info(f"Instantiating datamodule <{cfg.data._target_}>")
     datamodule: LightningDataModule = hydra.utils.instantiate(cfg.data)
 
@@ -76,8 +75,16 @@ def evaluate(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     log.info("Starting testing!")
     trainer.test(model=model, datamodule=datamodule, ckpt_path=cfg.ckpt_path)
 
-    # for predictions use trainer.predict(...)
-    # predictions = trainer.predict(model=model, dataloaders=dataloaders, ckpt_path=cfg.ckpt_path)
+    if cfg.get("predict"):
+        log.info("Starting predicting!")
+        save_predictions(
+            cfg=cfg,
+            log=log,
+            trainer=trainer,
+            model=model,
+            dataloaders=datamodule.test_dataloader(),
+            ckpt_path=cfg.ckpt_path,
+        )
 
     metric_dict = trainer.callback_metrics
 
@@ -90,6 +97,10 @@ def main(cfg: DictConfig) -> None:
 
     :param cfg: DictConfig configuration composed by Hydra.
     """
+    if not cfg.ckpt_path:
+        msg = "`ckpt_path` must be provided to evaluate model."
+        raise ValueError(msg)
+
     # apply extra utilities
     # (e.g. ask for tags if none are provided in cfg, print cfg tree, etc.)
     extras(cfg)
