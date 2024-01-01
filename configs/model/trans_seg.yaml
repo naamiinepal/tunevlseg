@@ -27,11 +27,17 @@ optimizer:
   lr: 2.0e-5
 
 scheduler:
-  _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
+  _target_: torch.optim.lr_scheduler.CosineAnnealingLR
   _partial_: true
-  mode: min
-  factor: 0.1
-  patience: 4
+  T_max: 50000
+  eta_min: 0.0001
+
+#scheduler:
+#  _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
+#  _partial_: true
+#  mode: min
+#  factor: 0.1
+#  patience: 4
 
 tokenizer_name_or_path: ${tokenizer_pretrained_path}
 

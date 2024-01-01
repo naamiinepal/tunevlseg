@@ -30,10 +30,7 @@ trainer:
 model:
   weight_decay: 0.0
   optimizer:
-    lr: 2.0e-5
-  scheduler:
-    factor: 0.1
-    patience: 5
+    lr: 0.001
   net:
     freeze_image_encoder: true
     freeze_text_encoder: true
@@ -96,7 +93,7 @@ train_transforms:
     - _target_: albumentations.pytorch.ToTensorV2
       transpose_mask: true
 
-eval_transforms: 
+_eval_transforms: 
   _target_: albumentations.Compose
   transforms:
     - _target_: albumentations.Resize
@@ -108,5 +105,5 @@ eval_transforms:
     - _target_: albumentations.pytorch.ToTensorV2
       transpose_mask: true
 
-val_transforms: ${eval_transforms}
-test_transforms: ${eval_transforms}
+val_transforms: ${_eval_transforms}
+test_transforms: ${_eval_transforms}
