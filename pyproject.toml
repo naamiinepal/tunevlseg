@@ -24,6 +24,3 @@ exclude_lines = [
     "if __name__ == .__main__.:",
 ]
 
-[tool.ruff]
-ignore-init-module-imports = true
-
