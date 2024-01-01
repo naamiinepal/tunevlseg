@@ -160,7 +160,16 @@ class PhraseCutDataset(Dataset):
 
         text_inputs = self.get_text_output(phrase)
 
-        return {"image": image, "mask": mask, **text_inputs}
+        mask_name = f"{image_id}.png"
+
+        # Metadata are needed to save the image for the predict step
+        return {
+            "image": image,
+            "mask": mask,
+            "mask_shape": mask_shape,
+            "mask_name": mask_name,
+            **text_inputs,
+        }
 
     def get_text_output(self, phrase: str):
         # Get a format randomly if prompt_format_list has more than one entries

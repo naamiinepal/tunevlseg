@@ -52,7 +52,7 @@ class ImageTextMaskModule(LightningModule):
         self.optimizer = optimizer
         self.scheduler = scheduler
 
-        self.tokenizer = AutoTokenizer.from_pretrained(
+        self.tokenizer: PreTrainedTokenizerBase = AutoTokenizer.from_pretrained(
             pretrained_model_name_or_path=tokenizer_name_or_path,
         )
 
@@ -65,9 +65,6 @@ class ImageTextMaskModule(LightningModule):
         self.train_iou = JaccardIndex(task=task, threshold=threshold)
         self.val_iou = JaccardIndex(task=task, threshold=threshold)
         self.test_iou = JaccardIndex(task=task, threshold=threshold)
-
-        # This is true until image, caption, and mask are logged for the first time
-        self.log_image_caption_mask = True
 
     def forward(self, *args, **kwargs):
         """Perform a forward pass through the model `self.net`."""
@@ -86,10 +83,7 @@ class ImageTextMaskModule(LightningModule):
             - A tensor of predictions.
             - A tensor of target labels.
         """
-        text_input = {k: batch[k] for k in ("input_ids", "attention_mask")}
-        img = batch["image"]
-
-        logits = self.forward(image_input=img, text_input=text_input)
+        logits = self.get_logits(batch)
 
         mask = batch["mask"]
         loss = self.loss_fn(logits, mask)
@@ -153,42 +147,40 @@ class ImageTextMaskModule(LightningModule):
             prog_bar=True,
         )
 
-        # Log images only for the first batch
+        # Only log images on the first validation step of first epoch
+        if self.logger is not None and self.global_step == 0:
+            img = batch["image"]
+
+            selected_images = img[: self.hparams.log_image_num]  # type: ignore
+
+            plot_images = self.get_plot_images(self.normalize_img(selected_images))
+
+            input_ids = batch["input_ids"]
+
+            plot_input_ids = self.decode_input_ids(
+                input_ids[: self.hparams.log_image_num],  # type: ignore
+            )
+
+            plot_label = self.get_plot_images(targets)
+
+            data = list(zip(plot_images, plot_input_ids, plot_label))
+
+            self.logger.log_table(  # type: ignore
+                "val_caption_label",
+                columns=self.plot_columns,
+                data=data,
+            )
+
+        # Log images only for the first batch of each epoch
         if self.logger is not None and batch_idx == 0:
             plot_preds = self.get_plot_images(preds)
 
-            self.logger.log_image("val_pred", list(plot_preds))
-
-            if self.log_image_caption_mask:
-                img = batch["image"]
-
-                selected_images = img[: self.hparams.log_image_num]
-
-                plot_images = self.get_plot_images(self.normalize_img(selected_images))
-
-                input_ids = batch["input_ids"]
-
-                plot_input_ids = self.decode_input_ids(
-                    input_ids[: self.hparams.log_image_num],
-                )
-
-                plot_label = self.get_plot_images(targets)
-
-                data = list(zip(plot_images, plot_input_ids, plot_label))
-
-                self.logger.log_table(
-                    "val_caption_label",
-                    columns=self.plot_columns,
-                    data=data,
-                )
-
-                # Stop logging now
-                self.log_image_caption_mask = False
+            self.logger.log_image("val_pred", list(plot_preds))  # type: ignore
 
     def get_plot_images(self, images: torch.Tensor):
         return map(
             wandb.Image,
-            map(TF.to_pil_image, images[: self.hparams.log_image_num].float()),
+            map(TF.to_pil_image, images[: self.hparams.log_image_num].float()),  # type: ignore
         )
 
     def decode_input_ids(
@@ -229,6 +221,25 @@ class ImageTextMaskModule(LightningModule):
             prog_bar=True,
         )
 
+    def predict_step(self, batch: BatchType) -> Any:
+        logits = self.get_logits(batch)
+
+        preds = torch.sigmoid(logits)
+
+        # Mask name and shape is needed to save the predictions
+        # in their original size
+        return {
+            "preds": preds,
+            "mask_name": batch["mask_name"],
+            "mask_shape": batch["mask_shape"],
+        }
+
+    def get_logits(self, batch: BatchType):
+        text_input = {k: batch[k] for k in ("input_ids", "attention_mask")}
+        img = batch["image"]
+
+        return self.forward(image_input=img, text_input=text_input)
+
     def setup(self, stage: str | None) -> None:
         """Lightning hook that is called at the beginning of fit (train + validate), validate,
         test, or predict.
@@ -238,7 +249,7 @@ class ImageTextMaskModule(LightningModule):
 
         :param stage: Either `"fit"`, `"validate"`, `"test"`, or `"predict"`.
         """
-        if self.hparams.compile and (stage is None or stage == "fit"):
+        if self.hparams.compile and (stage is None or stage == "fit"):  # type: ignore
             self.net = torch.compile(self.net)
 
     def configure_optimizers(self) -> dict[str, Any]:
@@ -256,7 +267,7 @@ class ImageTextMaskModule(LightningModule):
 
         :return: A dict containing the configured optimizers and learning-rate schedulers to be used for training.
         """
-        if self.hparams.weight_decay > 0:
+        if self.hparams.weight_decay > 0:  # type: ignore
             # separate out all parameters to those that will and won't experience regularizing weight decay
             decay = set()
             no_decay = set()
