@@ -175,7 +175,7 @@ class PhraseCutDataset(Dataset):
         # Get a format randomly if prompt_format_list has more than one entries
         prompt_format = (
             self.prompt_format_choices[0]
-            if len(self.prompt_format_choices)
+            if len(self.prompt_format_choices) == 1
             else random.choice(self.prompt_format_choices)
         )
 
