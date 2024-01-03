@@ -30,7 +30,7 @@ trainer:
 model:
   weight_decay: 0.0
   optimizer:
-    lr: 0.001
+    lr: 2.0e-4
   net:
     freeze_image_encoder: true
     freeze_text_encoder: true
@@ -45,6 +45,7 @@ model:
 
 data:
   batch_size: 64
+  drop_last: true
 
 logger:
   wandb:

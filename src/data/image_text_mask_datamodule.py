@@ -14,6 +14,9 @@ class ImageTextDatamodule(LightningDataModule):
         batch_size: int = 32,
         num_workers: int = 4,
         pin_memory: bool = True,
+        drop_last: bool = False,
+        *args,
+        **kwargs,
     ) -> None:
         super().__init__()
 
@@ -56,6 +59,7 @@ class ImageTextDatamodule(LightningDataModule):
             batch_size=self.batch_size_per_device,
             num_workers=self.hparams.num_workers,
             pin_memory=self.hparams.pin_memory,
+            drop_last=self.hparams.drop_last,
             shuffle=True,
         )
 

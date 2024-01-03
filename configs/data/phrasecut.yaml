@@ -29,6 +29,7 @@ test_ds:
   prompt_method: fixed
   neg_prob: 0
 
-batch_size: 16
+batch_size: 32
 num_workers: 4
+drop_last: false
 pin_memory: true
