@@ -113,6 +113,7 @@ class ImageTextMaskModule(LightningModule):
                 "train_iou_step": self.train_iou,
             },
             prog_bar=True,
+            batch_size=len(preds),
         )
 
         # and the average across the epoch, to the progress bar and logger
@@ -123,6 +124,7 @@ class ImageTextMaskModule(LightningModule):
             on_epoch=True,
             prog_bar=True,
             logger=True,
+            batch_size=len(preds),
         )
 
         # return loss or backpropagation will fail
@@ -148,6 +150,7 @@ class ImageTextMaskModule(LightningModule):
         self.log_dict(
             {"val_dice": self.val_dice, "val_iou": self.val_iou, "val_loss": loss},
             prog_bar=True,
+            batch_size=len(preds),
         )
 
         # Only log images on the first validation step of first epoch
@@ -222,6 +225,7 @@ class ImageTextMaskModule(LightningModule):
         self.log_dict(
             {"test_dice": self.test_dice, "test_iou": self.test_iou, "test_loss": loss},
             prog_bar=True,
+            batch_size=len(preds),
         )
 
     def predict_step(self, batch: Str2Any) -> Str2Any:
