@@ -1,7 +1,7 @@
 # pyright: reportIncompatibleMethodOverride=false
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, Mapping
+from typing import TYPE_CHECKING, Any, Literal, Mapping, Optional
 
 import torch
 import wandb
@@ -14,7 +14,7 @@ from transformers import AutoTokenizer, PreTrainedTokenizerBase
 if TYPE_CHECKING:
     from pathlib import Path
 
-BatchType = Mapping[str, Any]
+Str2Any = Mapping[str, Any]
 
 
 class ImageTextMaskModule(LightningModule):
@@ -34,6 +34,9 @@ class ImageTextMaskModule(LightningModule):
         threshold: float = 0.5,
         weight_decay: float = 0.0,
         log_image_num: int = 8,
+        lr_scheduler_config: Optional[Str2Any] = None,
+        *args,
+        **kwargs,
     ) -> None:
         """Initialize a `ImageTextModule`.
 
@@ -72,7 +75,7 @@ class ImageTextMaskModule(LightningModule):
 
     def model_step(
         self,
-        batch: BatchType,
+        batch: Str2Any,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Perform a single model step on a batch of data.
 
@@ -92,7 +95,7 @@ class ImageTextMaskModule(LightningModule):
 
         return loss, preds, mask.long()
 
-    def training_step(self, batch: BatchType, batch_idx: int) -> torch.Tensor:
+    def training_step(self, batch: Str2Any, batch_idx: int) -> torch.Tensor:
         """Perform a single training step on a batch of data from the training set.
 
         :param batch: A batch of data (a tuple) containing the input tensor of images and target
@@ -131,7 +134,7 @@ class ImageTextMaskModule(LightningModule):
             {"train_dice_epoch": self.train_dice, "train_iou_epoch": self.train_iou},
         )
 
-    def validation_step(self, batch: BatchType, batch_idx: int) -> None:
+    def validation_step(self, batch: Str2Any, batch_idx: int) -> None:
         """Perform a single validation step on a batch of data from the validation set.
 
         :param batch: A batch of data (a tuple) containing the input tensor of images and target
@@ -204,7 +207,7 @@ class ImageTextMaskModule(LightningModule):
 
         return (img - img_min) / (img_max - img_min)
 
-    def test_step(self, batch: BatchType) -> None:
+    def test_step(self, batch: Str2Any) -> None:
         """Perform a single test step on a batch of data from the test set.
 
         :param batch: A batch of data (a tuple) containing the input tensor of images and target
@@ -221,7 +224,7 @@ class ImageTextMaskModule(LightningModule):
             prog_bar=True,
         )
 
-    def predict_step(self, batch: BatchType) -> Any:
+    def predict_step(self, batch: Str2Any) -> Str2Any:
         logits = self.get_logits(batch)
 
         preds = torch.sigmoid(logits)
@@ -234,7 +237,7 @@ class ImageTextMaskModule(LightningModule):
             "mask_shape": batch["mask_shape"],
         }
 
-    def get_logits(self, batch: BatchType):
+    def get_logits(self, batch: Str2Any):
         text_input = {k: batch[k] for k in ("input_ids", "attention_mask")}
         img = batch["image"]
 
@@ -316,7 +319,7 @@ class ImageTextMaskModule(LightningModule):
             optim_groups = [
                 {
                     "params": [param_dict[pn] for pn in decay],
-                    "weight_decay": self.hparams.weight_decay,
+                    "weight_decay": self.hparams.weight_decay,  # type: ignore
                 },
                 {
                     "params": [param_dict[pn] for pn in no_decay],
@@ -325,7 +328,7 @@ class ImageTextMaskModule(LightningModule):
             ]
         else:
             optim_groups = self.parameters()
-        optimizer = self.optimizer(optim_groups)
+        optimizer = self.optimizer(optim_groups)  # type: ignore
         if self.scheduler is not None:
             scheduler = self.scheduler(optimizer=optimizer)
             return {
@@ -335,6 +338,7 @@ class ImageTextMaskModule(LightningModule):
                     "monitor": "val_loss",
                     "interval": "epoch",
                     "frequency": 1,
+                    **(self.hparams.lr_scheduler_config or {}),  # type: ignore
                 },
             }
         return {"optimizer": optimizer}

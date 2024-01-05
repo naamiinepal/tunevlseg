@@ -24,13 +24,17 @@ weight_decay: 0.0
 optimizer:
   _target_: torch.optim.AdamW
   _partial_: true
-  lr: 2.0e-5
+  lr: 2.0e-4
+
+lr_scheduler_config:
+  interval: step
 
 scheduler:
   _target_: torch.optim.lr_scheduler.CosineAnnealingLR
   _partial_: true
   T_max: 50000
-  eta_min: 0.0001
+  eta_min: 1.0e-6
+
 
 #scheduler:
 #  _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
