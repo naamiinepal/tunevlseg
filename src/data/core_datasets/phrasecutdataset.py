@@ -27,7 +27,7 @@ StrPath = Union[str, Path]
 PolygonType = Iterable[Iterable[Iterable[Tuple[int, int]]]]
 TaskType = Mapping[str, Union[str, PolygonType]]
 PromptMethodType = Literal["fixed", "shuffle", "shuffle+"]
-Str2SetStr = Mapping[str, Set[str]]
+Str2SetInt = Mapping[str, Set[int]]
 
 
 class PhraseCutDataset(Dataset):
@@ -55,7 +55,7 @@ class PhraseCutDataset(Dataset):
             self.unique_phrases = tuple(self.phrase2image_ids)
         else:
             # For the sake of types, keep them empty
-            self.phrase2image_ids: Str2SetStr = {}
+            self.phrase2image_ids: Str2SetInt = {}
             self.unique_phrases: Tuple[str, ...] = ()
 
         self.image_path = data_root / image_dir
@@ -70,13 +70,13 @@ class PhraseCutDataset(Dataset):
 
         self.prompt_format_choices = self.get_prompt_list(prompt_method)
 
-    def get_phrase2image_ids(self) -> Str2SetStr:
+    def get_phrase2image_ids(self) -> Str2SetInt:
         # Map phrase to a list of images
-        phrase2image_ids: Mapping[str, List[str]] = defaultdict(list)
+        phrase2image_ids: Mapping[str, List[int]] = defaultdict(list)
 
         for task in self.tasks:
-            phrase = task["phrase"]
-            image_id = task["image_id"]
+            phrase: str = task["phrase"]
+            image_id: int = task["image_id"]
 
             phrase2image_ids[phrase].append(image_id)
 
@@ -128,14 +128,14 @@ class PhraseCutDataset(Dataset):
     def __getitem__(self, idx: int):
         task = self.tasks[idx]
 
-        image_id = task["image_id"]
+        image_id: int = task["image_id"]
 
         image = self.load_image(self.image_path / f"{image_id}.jpg", cv2.IMREAD_COLOR)
 
         # Convert BGR to RGB
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-        phrase = task["phrase"]
+        phrase: str = task["phrase"]
         new_phrase_or_none = self.get_neg_phrase(
             curr_phrase=phrase,
             curr_image_id=image_id,
@@ -160,24 +160,21 @@ class PhraseCutDataset(Dataset):
 
         text_inputs = self.get_text_output(phrase)
 
-        mask_name = f"{image_id}.png"
+        mask_name = f"{image_id}-{phrase}.png"
 
         # Metadata are needed to save the image for the predict step
         return {
             "image": image,
             "mask": mask,
-            "mask_shape": mask_shape,
+            "mask_shape": np.array(mask_shape),
             "mask_name": mask_name,
             **text_inputs,
         }
 
     def get_text_output(self, phrase: str):
         # Get a format randomly if prompt_format_list has more than one entries
-        prompt_format = (
-            self.prompt_format_choices[0]
-            if len(self.prompt_format_choices) == 1
-            else random.choice(self.prompt_format_choices)
-        )
+        # If the format is fixed, the only entry is fetched making it deterministic
+        prompt_format = random.choice(self.prompt_format_choices)
 
         prompt = prompt_format.format(phrase)
 
@@ -189,10 +186,13 @@ class PhraseCutDataset(Dataset):
             return_tensors=self.return_tensors,
         )
 
-        # Remove the first (batch) dimension
+        # Remove the first (batch) dimension if self.return_tensors is not None
+        if self.return_tensors is None:
+            return text_inputs
+
         return {k: v[0] for k, v in text_inputs.items()}
 
-    def get_neg_phrase(self, curr_phrase: str, curr_image_id: str) -> Optional[str]:
+    def get_neg_phrase(self, curr_phrase: str, curr_image_id: int) -> Optional[str]:
         # Use zero mask if neg_prob is greater than 1
         # Do not use mask if the neg_prob is less than 0
         if self.neg_prob >= 1 or (
