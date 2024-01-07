@@ -27,6 +27,7 @@ from src.utils import (  # noqa: E402
     extras,
     instantiate_loggers,
     log_hyperparameters,
+    register_new_resolvers,
     save_predictions,
     task_wrapper,
 )
@@ -92,6 +93,7 @@ def evaluate(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
 
 
 @hydra.main(version_base="1.3", config_path="../configs", config_name="eval.yaml")
+@register_new_resolvers
 def main(cfg: DictConfig) -> None:
     """Main entry point for evaluation.
 

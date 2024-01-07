@@ -53,9 +53,16 @@ def save_predictions(
     log.info(f"Saving the generated masks in directory {output_masks_dir}")
 
     # The interpolation to use to save the images
-    output_interpolation = TF.InterpolationMode(
-        cfg.get("output_interpolation", "bicubic"),
-    )
+    output_interpolation = cfg.get("output_interpolation")
+
+    if not isinstance(output_interpolation, TF.InterpolationMode):
+        if output_interpolation is not None:
+            log.warning(
+                "`output_interpolation` has been passed but must be of type "
+                f"`torchvision.transforms.functional.InterpolationMode` not {type(output_interpolation)}."
+                "Falling back to bicubic interpolation.",
+            )
+        output_interpolation = TF.InterpolationMode.BICUBIC
 
     for p in pred_outputs:
         preds: Iterable[torch.Tensor] = p["preds"]

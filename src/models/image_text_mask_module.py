@@ -1,7 +1,7 @@
 # pyright: reportIncompatibleMethodOverride=false
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, Mapping, Optional
+from typing import TYPE_CHECKING, Any, Literal, Mapping
 
 import torch
 import wandb
@@ -34,7 +34,7 @@ class ImageTextMaskModule(LightningModule):
         threshold: float = 0.5,
         weight_decay: float = 0.0,
         log_image_num: int = 8,
-        lr_scheduler_config: Optional[Str2Any] = None,
+        lr_scheduler_config: Str2Any | None = None,
         *args,
         **kwargs,
     ) -> None:

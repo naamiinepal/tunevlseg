@@ -82,7 +82,7 @@ train_transforms:
       max_size: ${img_size}
     - _target_: albumentations.Rotate
       limit: 10
-      border_mode: 1 # cv2.BORDER_REPLICATE
+      border_mode: ${import_eval:cv2.BORDER_REPLICATE}
       p: 0.2
     - _target_: albumentations.RandomCrop
       width: ${img_size}

@@ -39,6 +39,7 @@ from src.utils import (  # noqa: E402
     instantiate_callbacks,
     instantiate_loggers,
     log_hyperparameters,
+    register_new_resolvers,
     save_predictions,
     task_wrapper,
 )
@@ -131,6 +132,7 @@ def train(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
 
 
 @hydra.main(version_base="1.3", config_path="../configs", config_name="train.yaml")
+@register_new_resolvers
 def main(cfg: DictConfig) -> Optional[float]:
     """Main entry point for training.
 
