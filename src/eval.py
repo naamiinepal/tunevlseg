@@ -38,9 +38,11 @@ if TYPE_CHECKING:
 
 log = RankedLogger(__name__, rank_zero_only=True)
 
+Dict2Any = Dict[str, Any]
+
 
 @task_wrapper
-def evaluate(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+def evaluate(cfg: DictConfig) -> Tuple[Dict2Any, Dict2Any]:
     """Evaluates given checkpoint on a datamodule testset.
 
     This method is wrapped in optional @task_wrapper decorator, that controls the behavior during
