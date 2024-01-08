@@ -13,10 +13,10 @@ from typing import (
     Tuple,
     Union,
 )
+import json
 
 import cv2
 import cv2.typing
-import ijson
 import numpy as np
 from matplotlib import pyplot as plt
 from torch.utils.data import Dataset
@@ -83,17 +83,16 @@ class PhraseCutDataset(Dataset):
         return {k: set(v) for k, v in phrase2image_ids.items()}
 
     @staticmethod
-    def get_tasks(json_path: StrPath):
-        task_list: List[TaskType] = []
+    def get_tasks(json_path: StrPath) -> Tuple[TaskType, ...]:
+        with open(json_path) as f:
+            content = json.load(f)
+
         required_keys = ("phrase", "Polygons", "image_id")
 
-        # Load json iteratively
-        with open(json_path, "rb") as f:
-            for item in ijson.items(f, "item", use_float=True):
-                task: TaskType = {k: v for k, v in item.items() if k in required_keys}
-                task_list.append(task)
-
-        return tuple(task_list)
+        # Get only the required keys to reduce the memory usage
+        return tuple(
+            {k: v for k, v in item.items() if k in required_keys} for item in content
+        )
 
     @staticmethod
     def get_prompt_list(prompt_method: PromptMethodType):
