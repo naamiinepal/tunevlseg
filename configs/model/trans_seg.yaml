@@ -32,7 +32,7 @@ lr_scheduler_config:
 scheduler:
   _target_: torch.optim.lr_scheduler.CosineAnnealingLR
   _partial_: true
-  T_max: 50000
+  T_max: 2.0e6
   eta_min: 1.0e-6
 
 

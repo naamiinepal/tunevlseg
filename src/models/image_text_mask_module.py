@@ -27,7 +27,7 @@ class ImageTextMaskModule(LightningModule):
         net: nn.Module,
         loss_fn: nn.Module,
         optimizer: type[optim.optimizer.Optimizer],
-        scheduler: type[optim.lr_scheduler.LRScheduler],
+        scheduler: type[optim.lr_scheduler.LRScheduler] | None,
         tokenizer_name_or_path: str | Path,
         compile: bool,
         task: Literal["binary", "multiclass", "multilabel"],
