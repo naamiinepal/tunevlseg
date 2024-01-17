@@ -1,22 +1,11 @@
 # pyright: reportGeneralTypeIssues=false
+import json
 import random
 from collections import defaultdict
 from pathlib import Path
-from typing import (
-    Callable,
-    Iterable,
-    List,
-    Literal,
-    Mapping,
-    Optional,
-    Set,
-    Tuple,
-    Union,
-)
-import json
+from typing import Callable, List, Literal, Mapping, Optional, Set, Tuple, Union
 
 import cv2
-import cv2.typing
 import numpy as np
 from matplotlib import pyplot as plt
 from torch.utils.data import Dataset
@@ -24,8 +13,7 @@ from transformers import AutoTokenizer
 
 StrPath = Union[str, Path]
 
-PolygonType = Iterable[Iterable[Iterable[Tuple[int, int]]]]
-TaskType = Mapping[str, Union[str, PolygonType]]
+TaskType = Mapping[Literal["task_id", "phrase"], str]
 PromptMethodType = Literal["fixed", "shuffle", "shuffle+"]
 Str2SetInt = Mapping[str, Set[int]]
 
@@ -37,6 +25,7 @@ class PhraseCutDataset(Dataset):
         task_json_path: StrPath,
         tokenizer_pretrained_path: StrPath,
         image_dir: StrPath = "images",
+        mask_dir: StrPath = "masks",
         transforms: Optional[Callable] = None,
         return_tensors: Optional[Literal["tf", "pt", "np"]] = None,
         prompt_method: PromptMethodType = "fixed",
@@ -47,7 +36,8 @@ class PhraseCutDataset(Dataset):
 
         data_root = Path(data_root)
 
-        self.tasks = self.get_tasks(data_root / task_json_path)
+        with (data_root / task_json_path).open() as f:
+            self.tasks: Tuple[TaskType, ...] = tuple(json.load(f))
 
         # Needed only for negative sampling and is expensive
         if neg_prob > 0:
@@ -59,6 +49,7 @@ class PhraseCutDataset(Dataset):
             self.unique_phrases: Tuple[str, ...] = ()
 
         self.image_path = data_root / image_dir
+        self.mask_path = data_root / mask_dir
 
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_pretrained_path)
         self.return_tensors = return_tensors
@@ -75,24 +66,19 @@ class PhraseCutDataset(Dataset):
         phrase2image_ids: Mapping[str, List[int]] = defaultdict(list)
 
         for task in self.tasks:
-            phrase: str = task["phrase"]
-            image_id: int = task["image_id"]
+            phrase = task["phrase"]
+            task_id = task["task_id"]
+
+            image_id = self.get_image_id_from_task_id(task_id)
 
             phrase2image_ids[phrase].append(image_id)
 
         return {k: set(v) for k, v in phrase2image_ids.items()}
 
     @staticmethod
-    def get_tasks(json_path: StrPath) -> Tuple[TaskType, ...]:
-        with open(json_path) as f:
-            content = json.load(f)
-
-        required_keys = ("phrase", "Polygons", "image_id")
-
-        # Get only the required keys to reduce the memory usage
-        return tuple(
-            {k: v for k, v in item.items() if k in required_keys} for item in content
-        )
+    def get_image_id_from_task_id(task_id: str):
+        img_id, _ = task_id.split("__", 1)
+        return int(img_id)
 
     @staticmethod
     def get_prompt_list(prompt_method: PromptMethodType):
@@ -127,27 +113,37 @@ class PhraseCutDataset(Dataset):
     def __getitem__(self, idx: int):
         task = self.tasks[idx]
 
-        image_id: int = task["image_id"]
+        task_id = task["task_id"]
+
+        image_id = self.get_image_id_from_task_id(task_id)
 
         image = self.load_image(self.image_path / f"{image_id}.jpg", cv2.IMREAD_COLOR)
 
         # Convert BGR to RGB
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-        phrase: str = task["phrase"]
+        phrase = task["phrase"]
         new_phrase_or_none = self.get_neg_phrase(
             curr_phrase=phrase,
             curr_image_id=image_id,
         )
 
         mask_shape = image.shape[:-1]
+        mask_name = f"{task_id}-{phrase}.png"
+
         if new_phrase_or_none is not None:
             # Replace phrase and make mask zeros
             phrase = new_phrase_or_none
             mask = np.zeros(mask_shape, np.float32)
         else:
-            # Get polygon from mask if new_phrase is not extracted
-            mask = self.polygon_to_mat(mask_shape, task["Polygons"])
+            # If new_phrase was not assiged, load mask from the disk
+            mask = (
+                self.load_image(
+                    self.mask_path / mask_name,
+                    cv2.IMREAD_GRAYSCALE,
+                ).astype(np.float32)
+                / 255
+            )
 
         # Add the final channel layer to mask
         mask = mask[..., None]
@@ -158,8 +154,6 @@ class PhraseCutDataset(Dataset):
             mask = transformed["mask"]
 
         text_inputs = self.get_text_output(phrase)
-
-        mask_name = f"{image_id}-{phrase}.png"
 
         # Metadata are needed to save the image for the predict step
         return {
@@ -222,40 +216,6 @@ class PhraseCutDataset(Dataset):
             raise ValueError(msg, str_path)
 
         return img
-
-    # @staticmethod
-    # def polygon_to_pil(
-    #     img_size: Tuple[int, int],
-    #     polygons: PolygonType,
-    # ):
-    #     # Create mask from polygon
-    #     mask = Image.new("1", img_size)
-    #     img_draw = ImageDraw.Draw(mask)
-    #
-    #     # Loop to add multiple polygons to the mask
-    #     for poly in polygons:
-    #         for p in poly:
-    #             int_p = np.around(p).astype(int)
-    #             img_draw.polygon(int_p.flatten().tolist(), fill=1, outline=1)
-    #
-    #     return mask
-
-    @staticmethod
-    def polygon_to_mat(img_size: Tuple[int, int], polygons: PolygonType):
-        if len(img_size) != 2:
-            msg = "The image img_size be of two dimensions"
-            raise ValueError(msg)
-
-        # Create an empty mask for the polygon
-        # Its type can be either float32 or uint8
-        mask = np.zeros(img_size, np.float32)
-
-        # Loop to add multiple polygons to the mask
-        for poly in polygons:
-            pts = [np.around(p).astype(np.int32) for p in poly]
-            cv2.fillPoly(mask, pts, 1.0)
-
-        return mask
 
     @staticmethod
     def plot_img_mask_cut(
