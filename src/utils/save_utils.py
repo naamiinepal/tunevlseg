@@ -7,6 +7,7 @@ import torchvision.utils
 from omegaconf import DictConfig
 from pytorch_lightning import LightningDataModule, LightningModule, Trainer
 from torchvision.transforms import functional as TF
+from tqdm import tqdm
 
 
 def save_predictions(
@@ -64,30 +65,34 @@ def save_predictions(
             )
         output_interpolation = TF.InterpolationMode.BICUBIC
 
-    for p in pred_outputs:
-        preds: Iterable[torch.Tensor] = p["preds"]
-        mask_names: Iterable[str] = p["mask_name"]
-        mask_shapes: Iterable[Iterable[int]] = p["mask_shape"]
-        for pred, mask_name, mask_shape in zip(preds, mask_names, mask_shapes):
-            file_path: Path = output_masks_dir / mask_name
+    with tqdm(desc="Saving Masks", total=len(dataloaders.dataset)) as pbar:  # type: ignore
+        for p in pred_outputs:
+            preds: Iterable[torch.Tensor] = p["preds"]
+            mask_names: Iterable[str] = p["mask_name"]
+            mask_shapes: Iterable[Iterable[int]] = p["mask_shape"]
+            for pred, mask_name, mask_shape in zip(preds, mask_names, mask_shapes):
+                file_path: Path = output_masks_dir / mask_name
 
-            # `mask_name` may contain directories, so making sure they exist
-            file_path.parent.mkdir(parents=True, exist_ok=True)
+                # `mask_name` may contain directories, so making sure they exist
+                file_path.parent.mkdir(parents=True, exist_ok=True)
 
-            mask_shape_list: List[int] = (
-                mask_shape.tolist()
-                if isinstance(mask_shape, torch.Tensor)
-                else list(mask_shape)
-            )
+                mask_shape_list: List[int] = (
+                    mask_shape.tolist()
+                    if isinstance(mask_shape, torch.Tensor)
+                    else list(mask_shape)
+                )
 
-            torchvision.utils.save_image(
-                TF.resize(
-                    pred.float(),
-                    size=mask_shape_list,
-                    interpolation=output_interpolation,
-                ),
-                file_path,
-            )
+                torchvision.utils.save_image(
+                    TF.resize(
+                        pred.float(),
+                        size=mask_shape_list,
+                        interpolation=output_interpolation,
+                        antialias=False,
+                    ),
+                    file_path,
+                )
+
+                pbar.update()
 
     total_images_saved = sum(len(p["preds"]) for p in pred_outputs)
 
