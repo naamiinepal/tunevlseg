@@ -2,7 +2,7 @@ _target_: src.data.image_text_mask_datamodule.ImageTextDatamodule
 train_ds:
   _target_: src.data.core_datasets.phrasecutdataset.PhraseCutDataset
   data_root: ${data_root}
-  task_json_path: refer_train.json
+  task_json_path: filtered_tasks/refer_train.json
   tokenizer_pretrained_path: ${tokenizer_pretrained_path}
   transforms: ${train_transforms}
   return_tensors: pt
@@ -12,7 +12,7 @@ train_ds:
 val_ds:
   _target_: src.data.core_datasets.phrasecutdataset.PhraseCutDataset
   data_root: ${data_root}
-  task_json_path: refer_val.json
+  task_json_path: filtered_tasks/refer_val.json
   tokenizer_pretrained_path: ${tokenizer_pretrained_path}
   transforms: ${val_transforms}
   return_tensors: pt
@@ -22,7 +22,7 @@ val_ds:
 test_ds:
   _target_: src.data.core_datasets.phrasecutdataset.PhraseCutDataset
   data_root: ${data_root}
-  task_json_path: refer_test.json
+  task_json_path: filtered_tasks/refer_test.json
   tokenizer_pretrained_path: ${tokenizer_pretrained_path}
   transforms: ${test_transforms}
   return_tensors: pt
