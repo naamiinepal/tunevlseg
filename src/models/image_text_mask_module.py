@@ -15,6 +15,8 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
     from pathlib import Path
 
+    from pytorch_lightning.loggers import WandbLogger
+
     MappingStr2Any = Mapping[str, Any]
     DictStr2Any = dict[str, Any]
 
@@ -70,6 +72,8 @@ class ImageTextMaskModule(LightningModule):
         self.train_iou = JaccardIndex(task=task, threshold=threshold)
         self.val_iou = JaccardIndex(task=task, threshold=threshold)
         self.test_iou = JaccardIndex(task=task, threshold=threshold)
+
+        self.logger: WandbLogger | None
 
     def forward(self, *args, **kwargs) -> torch.Tensor:
         """Perform a forward pass through the model `self.net`."""
@@ -171,9 +175,14 @@ class ImageTextMaskModule(LightningModule):
 
             plot_label = self.get_plot_images(targets)
 
-            data = list(zip(plot_images, plot_input_ids, plot_label))
+            data = [
+                [img, inp_id, label]
+                for img, inp_id, label in zip(
+                    plot_images, plot_input_ids, plot_label, strict=True
+                )
+            ]
 
-            self.logger.log_table(  # type: ignore
+            self.logger.log_table(
                 "val_caption_label",
                 columns=self.plot_columns,
                 data=data,
@@ -183,7 +192,7 @@ class ImageTextMaskModule(LightningModule):
         if self.logger is not None and batch_idx == 0:
             plot_preds = self.get_plot_images(preds)
 
-            self.logger.log_image("val_pred", list(plot_preds))  # type: ignore
+            self.logger.log_image("val_pred", list(plot_preds))
 
     def get_plot_images(self, images: torch.Tensor) -> map[wandb.Image]:
         return map(
@@ -243,7 +252,7 @@ class ImageTextMaskModule(LightningModule):
             "mask_shape": batch["mask_shape"],
         }
 
-    def get_logits(self, batch: MappingStr2Any):
+    def get_logits(self, batch: MappingStr2Any) -> torch.Tensor:
         text_input = {k: batch[k] for k in ("input_ids", "attention_mask")}
         img = batch["image"]
 
@@ -261,6 +270,64 @@ class ImageTextMaskModule(LightningModule):
         if self.hparams.compile and (stage is None or stage == "fit"):  # type: ignore
             self.net = torch.compile(self.net)
 
+    def get_optim_groups(self):
+        if self.hparams.weight_decay <= 0:  # type: ignore
+            return self.parameters()
+
+        # separate out all parameters to those that will and won't experience regularizing weight decay
+        decay = set()
+        no_decay = set()
+        whitelist_weight_modules = (nn.Linear, nn.Conv2d, nn.Conv1d)
+        blacklist_weight_modules = (
+            nn.Embedding,
+            nn.LayerNorm,
+            nn.BatchNorm2d,
+        )
+        for mn, m in self.named_modules():
+            for pn, _ in m.named_parameters():
+                fpn = f"{mn}.{pn}" if mn else pn  # full param name
+                if pn.endswith("proj_weight"):
+                    # Add project weights to decay set
+                    decay.add(fpn)
+                elif pn.endswith("weight"):
+                    # random note: because named_modules and named_parameters are recursive
+                    # we will see the same tensors p many many times. but doing it this way
+                    # allows us to know which parent module any tensor p belongs to...
+                    if isinstance(m, whitelist_weight_modules):
+                        # weights of whitelist modules will be weight decayed
+                        decay.add(fpn)
+                    elif isinstance(m, blacklist_weight_modules):
+                        # weights of blacklist modules will NOT be weight decayed
+                        no_decay.add(fpn)
+                else:
+                    # all paramters except weight will not be decayed
+                    no_decay.add(fpn)
+
+        inter_params = decay & no_decay
+        if len(inter_params) == 0:
+            msg = f"parameters {inter_params} made it into both decay/no_decay sets!"
+            raise ValueError(msg)
+
+        # validate that we considered every parameter
+        param_dict = dict(self.named_parameters())
+
+        extra_params = param_dict.keys() - (decay | no_decay)
+        if len(extra_params) == 0:
+            msg = f"parameters {extra_params} were not separated into either decay/no_decay set!"
+            raise ValueError(msg)
+
+        # create the pytorch optimizer parameters
+        return [
+            {
+                "params": [param_dict[pn] for pn in decay],
+                "weight_decay": self.hparams.weight_decay,  # type: ignore
+            },
+            {
+                "params": [param_dict[pn] for pn in no_decay],
+                "weight_decay": 0.0,
+            },
+        ]
+
     def configure_optimizers(self) -> DictStr2Any:
         """Choose what optimizers and learning-rate schedulers to use in your optimization.
         Normally you'd need one. But in the case of GANs or similar you might have multiple.
@@ -276,65 +343,9 @@ class ImageTextMaskModule(LightningModule):
 
         :return: A dict containing the configured optimizers and learning-rate schedulers to be used for training.
         """
-        if self.hparams.weight_decay > 0:  # type: ignore
-            # separate out all parameters to those that will and won't experience regularizing weight decay
-            decay = set()
-            no_decay = set()
-            whitelist_weight_modules = (nn.Linear, nn.Conv2d, nn.Conv1d)
-            blacklist_weight_modules = (
-                nn.Embedding,
-                nn.LayerNorm,
-                nn.BatchNorm2d,
-            )
-            for mn, m in self.named_modules():
-                for pn, _ in m.named_parameters():
-                    fpn = f"{mn}.{pn}" if mn else pn  # full param name
-                    if pn.endswith("proj_weight"):
-                        # Add project weights to decay set
-                        decay.add(fpn)
-                    elif pn.endswith("weight"):
-                        # random note: because named_modules and named_parameters are recursive
-                        # we will see the same tensors p many many times. but doing it this way
-                        # allows us to know which parent module any tensor p belongs to...
-                        if isinstance(m, whitelist_weight_modules):
-                            # weights of whitelist modules will be weight decayed
-                            decay.add(fpn)
-                        elif isinstance(m, blacklist_weight_modules):
-                            # weights of blacklist modules will NOT be weight decayed
-                            no_decay.add(fpn)
-                    else:
-                        # all paramters except weight will not be decayed
-                        no_decay.add(fpn)
-
-            inter_params = decay & no_decay
-            if len(inter_params) == 0:
-                msg = (
-                    f"parameters {inter_params} made it into both decay/no_decay sets!"
-                )
-                raise ValueError(msg)
-
-            # validate that we considered every parameter
-            param_dict = dict(self.named_parameters())
-
-            extra_params = param_dict.keys() - (decay | no_decay)
-            if len(extra_params) == 0:
-                msg = f"parameters {extra_params} were not separated into either decay/no_decay set!"
-                raise ValueError(msg)
-
-            # create the pytorch optimizer object
-            optim_groups = [
-                {
-                    "params": [param_dict[pn] for pn in decay],
-                    "weight_decay": self.hparams.weight_decay,  # type: ignore
-                },
-                {
-                    "params": [param_dict[pn] for pn in no_decay],
-                    "weight_decay": 0.0,
-                },
-            ]
-        else:
-            optim_groups = self.parameters()
+        optim_groups = self.get_optim_groups()
         optimizer = self.optimizer(optim_groups)  # type: ignore
+
         if self.scheduler is not None:
             scheduler = self.scheduler(optimizer=optimizer)
             return {
@@ -347,4 +358,5 @@ class ImageTextMaskModule(LightningModule):
                     **(self.hparams.lr_scheduler_config or {}),  # type: ignore
                 },
             }
+
         return {"optimizer": optimizer}

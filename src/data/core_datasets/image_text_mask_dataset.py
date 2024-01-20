@@ -80,7 +80,7 @@ class ImageTextDataset(Dataset):
         }
 
     @staticmethod
-    def load_image(img_path: Path):
+    def load_image(img_path: Path) -> MatLike:
         img = cv2.imread(str(img_path))
 
         if img is None:

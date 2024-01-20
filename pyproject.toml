@@ -5,22 +5,49 @@ addopts = [
   "--strict-markers",
   "--doctest-modules",
 ]
-filterwarnings = [
-  "ignore::DeprecationWarning",
-  "ignore::UserWarning",
-]
+filterwarnings = ["ignore::DeprecationWarning", "ignore::UserWarning"]
 log_cli = "True"
-markers = [
-  "slow: slow tests",
-]
+markers = ["slow: slow tests"]
 minversion = "6.0"
 testpaths = "tests/"
 
 [tool.coverage.report]
 exclude_lines = [
-    "pragma: nocover",
-    "raise NotImplementedError",
-    "raise NotImplementedError()",
-    "if __name__ == .__main__.:",
+  "pragma: nocover",
+  "raise NotImplementedError",
+  "raise NotImplementedError()",
+  "if __name__ == .__main__.:",
+
 ]
 
+[tool.ruff]
+select = [
+  # pycodestyle
+  "E",
+  # Pyflakes
+  "F",
+  # pyupgrade
+  "UP",
+  # flake8-bugbear
+  "B",
+  # flake8-simplify
+  "SIM",
+  # isort
+  "I",
+  # mccabe complex structure
+  "C90",
+  # flake8-return
+  "RET",
+  # flake8-comprehensions
+  "C4",
+  # NumPY-specific rules
+  "NPY",
+  # Perflint
+  "PERF",
+]
+
+# Avoid enforcing line-length violations (`E501`)
+ignore = ["E501"]
+
+# Assume Python 3.10
+target-version = "py310"

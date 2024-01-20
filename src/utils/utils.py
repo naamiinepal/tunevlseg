@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 import warnings
+from collections.abc import Callable
 from importlib.util import find_spec
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from src.utils import pylogger, rich_utils
 
 log = pylogger.RankedLogger(__name__, rank_zero_only=True)
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Mapping
 
     from omegaconf import DictConfig
 
@@ -47,7 +48,11 @@ def extras(cfg: DictConfig) -> None:
         rich_utils.print_config_tree(cfg, resolve=True, save_to_file=True)
 
 
-def task_wrapper(task_func: Callable[..., tuple[DictStr2Any, DictStr2Any]]) -> Callable:
+FReturnType = tuple[DictStr2Any, DictStr2Any]
+TaskWrapperFunc = TypeVar("TaskWrapperFunc", bound=Callable[..., FReturnType])
+
+
+def task_wrapper(task_func: TaskWrapperFunc) -> TaskWrapperFunc:
     """Optional decorator that controls the failure behavior when executing the task function.
 
     This wrapper can be used to:
@@ -70,7 +75,7 @@ def task_wrapper(task_func: Callable[..., tuple[DictStr2Any, DictStr2Any]]) -> C
     :return: The wrapped task function.
     """
 
-    def wrap(cfg: DictConfig) -> tuple[DictStr2Any, DictStr2Any]:
+    def wrap(cfg: DictConfig) -> FReturnType:
         # execute the task
         try:
             metric_dict, object_dict = task_func(cfg=cfg)
@@ -100,7 +105,7 @@ def task_wrapper(task_func: Callable[..., tuple[DictStr2Any, DictStr2Any]]) -> C
 
         return metric_dict, object_dict
 
-    return wrap
+    return wrap  # type:ignore
 
 
 def get_metric_value(

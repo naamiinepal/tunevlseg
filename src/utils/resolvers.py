@@ -2,13 +2,11 @@ from __future__ import annotations
 
 import functools
 from ast import literal_eval
+from collections.abc import Callable
 from importlib import import_module
-from typing import TYPE_CHECKING
+from typing import TypeVar
 
 from omegaconf import OmegaConf
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
 
 
 def import_resolver(string: str):
@@ -39,13 +37,16 @@ def import_resolver(string: str):
 
     imported_module = import_module(module, package="src")
 
-    for n in n.split("."):
-        imported_module = getattr(imported_module, n)
+    for attr in n.split("."):
+        imported_module = getattr(imported_module, attr)
 
     return imported_module
 
 
-def register_new_resolvers(func: Callable):
+ResolverFuncType = TypeVar("ResolverFuncType", bound=Callable[..., object])
+
+
+def register_new_resolvers(func: ResolverFuncType) -> ResolverFuncType:
     """Register new resolvers for omegaconf.
 
     Args:
@@ -68,4 +69,4 @@ def register_new_resolvers(func: Callable):
 
         return func(*args, **kwargs)
 
-    return inner_func
+    return inner_func  # type:ignore

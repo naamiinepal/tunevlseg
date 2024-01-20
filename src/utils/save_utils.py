@@ -76,7 +76,9 @@ def save_predictions(
             preds: Iterable[torch.Tensor] = p["preds"]
             mask_names: Iterable[str] = p["mask_name"]
             mask_shapes: Iterable[Iterable[int]] = p["mask_shape"]
-            for pred, mask_name, mask_shape in zip(preds, mask_names, mask_shapes):
+            for pred, mask_name, mask_shape in zip(
+                preds, mask_names, mask_shapes, strict=True
+            ):
                 file_path: Path = output_masks_dir / mask_name
 
                 # `mask_name` may contain directories, so making sure they exist

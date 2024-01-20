@@ -70,7 +70,7 @@ class PhraseCutDataset(Dataset):
 
     def get_phrase2image_ids(self) -> Str2SetInt:
         # Map phrase to a list of images
-        phrase2image_ids: dict[str, list[int]] = defaultdict(list)
+        phrase2image_ids: defaultdict[str, list[int]] = defaultdict(list)
 
         for task in self.tasks:
             phrase = task["phrase"]
