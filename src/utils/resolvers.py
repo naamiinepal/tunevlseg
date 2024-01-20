@@ -1,9 +1,14 @@
+from __future__ import annotations
+
 import functools
 from ast import literal_eval
 from importlib import import_module
-from typing import Callable
+from typing import TYPE_CHECKING
 
 from omegaconf import OmegaConf
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 def import_resolver(string: str):

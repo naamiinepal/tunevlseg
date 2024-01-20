@@ -1,7 +1,7 @@
 # pyright: reportIncompatibleMethodOverride=false
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, Mapping
+from typing import TYPE_CHECKING, Any, Literal
 
 import torch
 import wandb
@@ -12,9 +12,11 @@ from torchvision.transforms import functional as TF
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
     from pathlib import Path
 
-Str2Any = Mapping[str, Any]
+    MappingStr2Any = Mapping[str, Any]
+    DictStr2Any = dict[str, Any]
 
 
 class ImageTextMaskModule(LightningModule):
@@ -34,7 +36,7 @@ class ImageTextMaskModule(LightningModule):
         threshold: float = 0.5,
         weight_decay: float = 0.0,
         log_image_num: int = 8,
-        lr_scheduler_config: Str2Any | None = None,
+        lr_scheduler_config: MappingStr2Any | None = None,
         *args,
         **kwargs,
     ) -> None:
@@ -69,13 +71,13 @@ class ImageTextMaskModule(LightningModule):
         self.val_iou = JaccardIndex(task=task, threshold=threshold)
         self.test_iou = JaccardIndex(task=task, threshold=threshold)
 
-    def forward(self, *args, **kwargs):
+    def forward(self, *args, **kwargs) -> torch.Tensor:
         """Perform a forward pass through the model `self.net`."""
         return self.net(*args, **kwargs)
 
     def model_step(
         self,
-        batch: Str2Any,
+        batch: MappingStr2Any,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Perform a single model step on a batch of data.
 
@@ -95,7 +97,7 @@ class ImageTextMaskModule(LightningModule):
 
         return loss, preds, mask.long()
 
-    def training_step(self, batch: Str2Any, batch_idx: int) -> torch.Tensor:
+    def training_step(self, batch: MappingStr2Any, batch_idx: int) -> torch.Tensor:
         """Perform a single training step on a batch of data from the training set.
 
         :param batch: A batch of data (a tuple) containing the input tensor of images and target
@@ -136,7 +138,7 @@ class ImageTextMaskModule(LightningModule):
             {"train_dice_epoch": self.train_dice, "train_iou_epoch": self.train_iou},
         )
 
-    def validation_step(self, batch: Str2Any, batch_idx: int) -> None:
+    def validation_step(self, batch: MappingStr2Any, batch_idx: int) -> None:
         """Perform a single validation step on a batch of data from the validation set.
 
         :param batch: A batch of data (a tuple) containing the input tensor of images and target
@@ -183,7 +185,7 @@ class ImageTextMaskModule(LightningModule):
 
             self.logger.log_image("val_pred", list(plot_preds))  # type: ignore
 
-    def get_plot_images(self, images: torch.Tensor):
+    def get_plot_images(self, images: torch.Tensor) -> map[wandb.Image]:
         return map(
             wandb.Image,
             map(TF.to_pil_image, images[: self.hparams.log_image_num].float()),  # type: ignore
@@ -193,7 +195,7 @@ class ImageTextMaskModule(LightningModule):
         self,
         input_ids: torch.Tensor,
         tokenizer: PreTrainedTokenizerBase | None = None,
-    ):
+    ) -> list[str]:
         tokenizer = tokenizer or self.tokenizer
         return tokenizer.batch_decode(
             input_ids,
@@ -202,7 +204,7 @@ class ImageTextMaskModule(LightningModule):
         )
 
     @staticmethod
-    def normalize_img(img: torch.Tensor):
+    def normalize_img(img: torch.Tensor) -> torch.Tensor:
         kwargs = {"dim": (2, 3), "keepdim": True}
 
         img_min = img.amin(**kwargs)
@@ -210,7 +212,7 @@ class ImageTextMaskModule(LightningModule):
 
         return (img - img_min) / (img_max - img_min)
 
-    def test_step(self, batch: Str2Any) -> None:
+    def test_step(self, batch: MappingStr2Any) -> None:
         """Perform a single test step on a batch of data from the test set.
 
         :param batch: A batch of data (a tuple) containing the input tensor of images and target
@@ -228,7 +230,7 @@ class ImageTextMaskModule(LightningModule):
             batch_size=len(preds),
         )
 
-    def predict_step(self, batch: Str2Any) -> Str2Any:
+    def predict_step(self, batch: MappingStr2Any) -> DictStr2Any:
         logits = self.get_logits(batch)
 
         preds = torch.sigmoid(logits)
@@ -241,7 +243,7 @@ class ImageTextMaskModule(LightningModule):
             "mask_shape": batch["mask_shape"],
         }
 
-    def get_logits(self, batch: Str2Any):
+    def get_logits(self, batch: MappingStr2Any):
         text_input = {k: batch[k] for k in ("input_ids", "attention_mask")}
         img = batch["image"]
 
@@ -259,7 +261,7 @@ class ImageTextMaskModule(LightningModule):
         if self.hparams.compile and (stage is None or stage == "fit"):  # type: ignore
             self.net = torch.compile(self.net)
 
-    def configure_optimizers(self) -> dict[str, Any]:
+    def configure_optimizers(self) -> DictStr2Any:
         """Choose what optimizers and learning-rate schedulers to use in your optimization.
         Normally you'd need one. But in the case of GANs or similar you might have multiple.
 

@@ -1,16 +1,21 @@
 # pyright: reportGeneralTypeIssues=false
+from __future__ import annotations
+
 import concurrent.futures
 import json
 from pathlib import Path
-from typing import Iterable, List, Mapping, Tuple, Union
+from typing import TYPE_CHECKING
 
 import cv2
 import numpy as np
 
-StrPath = Union[str, Path]
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Mapping
 
-PolygonType = Iterable[Iterable[Iterable[Tuple[int, int]]]]
-TaskType = Mapping[str, Union[str, PolygonType]]
+    StrPath = str | Path
+
+    PolygonType = Iterable[Iterable[Iterable[tuple[int, int]]]]
+    TaskType = Mapping[str, str | PolygonType]
 
 
 def process_task(task: TaskType, image_root: Path, mask_output_dir: Path):
@@ -60,7 +65,7 @@ def main(
     mask_output_dir: StrPath,
     task_output_dir: StrPath,
     max_workers: int | None,
-):
+) -> None:
     image_root = Path(image_root)
 
     if not image_root.is_dir():
@@ -82,7 +87,7 @@ def main(
 
     # Error is automatically thrown here
     with task_json_path.open() as f:
-        tasks: List[TaskType] = json.load(f)
+        tasks: list[TaskType] = json.load(f)
 
     if not tasks:
         print("No task provided in:", task_json_path)

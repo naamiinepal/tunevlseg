@@ -1,15 +1,20 @@
-# pyright: reportGeneralTypeIssues=false
-from pathlib import Path
-from typing import Union
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 from torch import nn
 from transformers import CLIPTextModel
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    import torch
 
 
 class TransTextEncoder(nn.Module):
     def __init__(
         self,
-        pretrained_model_name_or_path: Union[str, Path],
+        pretrained_model_name_or_path: str | Path,
         image_hidden_size: int | None = None,
         *args,
         **kwargs,
@@ -25,9 +30,11 @@ class TransTextEncoder(nn.Module):
         super().__init__(*args, **kwargs)
 
         # Freeze clip model if needed
-        self.model = CLIPTextModel.from_pretrained(pretrained_model_name_or_path)
+        self.model: CLIPTextModel = CLIPTextModel.from_pretrained(
+            pretrained_model_name_or_path,
+        )  # type:ignore
 
-        self.config = self.model.config
+        self.config = self.model.config  # type:ignore
 
         text_hidden_size = self.config.hidden_size
 
@@ -38,7 +45,7 @@ class TransTextEncoder(nn.Module):
             else nn.Linear(text_hidden_size, image_hidden_size)
         )
 
-    def forward(self, *args, **kwargs):
+    def forward(self, *args, **kwargs) -> torch.Tensor:
         text_output = self.model(*args, **kwargs)
 
         # shape: (B, N_t, H_t)

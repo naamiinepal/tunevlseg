@@ -1,7 +1,13 @@
+# pyright: reportIncompatibleMethodOverride=false
+from __future__ import annotations
+
 import logging
-from typing import Mapping, Optional
+from typing import TYPE_CHECKING
 
 from lightning_utilities.core.rank_zero import rank_prefixed_message, rank_zero_only
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 
 class RankedLogger(logging.LoggerAdapter):
@@ -11,7 +17,7 @@ class RankedLogger(logging.LoggerAdapter):
         self,
         name: str = __name__,
         rank_zero_only: bool = False,
-        extra: Optional[Mapping[str, object]] = None,
+        extra: Mapping[str, object] | None = None,
     ) -> None:
         """Initializes a multi-GPU-friendly python command line logger that logs on all processes
         with their rank prefixed in the log message.
@@ -28,7 +34,7 @@ class RankedLogger(logging.LoggerAdapter):
         self,
         level: int,
         msg: str,
-        rank: Optional[int] = None,
+        rank: int | None = None,
         *args,
         **kwargs,
     ) -> None:
@@ -43,17 +49,17 @@ class RankedLogger(logging.LoggerAdapter):
         :param kwargs: Any additional keyword args to pass to the underlying logging function.
         """
         if self.isEnabledFor(level):
-            msg, kwargs = self.process(msg, kwargs)
             current_rank = getattr(rank_zero_only, "rank", None)
             if current_rank is None:
                 msg = "The `rank_zero_only.rank` needs to be set before use"
                 raise RuntimeError(msg)
+
+            msg, kwargs = self.process(msg, kwargs)
             msg = rank_prefixed_message(msg, current_rank)
-            if self.rank_zero_only:
-                if current_rank == 0:
-                    self.logger.log(level, msg, *args, **kwargs)
-            else:
-                if rank is None:
-                    self.logger.log(level, msg, *args, **kwargs)
-                elif current_rank == rank:
-                    self.logger.log(level, msg, *args, **kwargs)
+
+            if (
+                current_rank == 0
+                if self.rank_zero_only
+                else rank is None or current_rank == rank
+            ):
+                self.logger.log(level, msg, *args, **kwargs)

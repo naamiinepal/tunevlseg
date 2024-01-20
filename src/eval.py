@@ -1,8 +1,16 @@
-from typing import TYPE_CHECKING, Any, Dict, List, Tuple
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from omegaconf import DictConfig
+    from pytorch_lightning import LightningDataModule, LightningModule, Trainer
+    from pytorch_lightning.loggers import Logger
+
+    Dict2Any = dict[str, Any]
 
 import hydra
 import rootutils
-from omegaconf import DictConfig
 
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 # ------------------------------------------------------------------------------------ #
@@ -22,6 +30,7 @@ rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 # more info: https://github.com/ashleve/rootutils
 # ------------------------------------------------------------------------------------ #
 
+
 from src.utils import (  # noqa: E402
     RankedLogger,
     extras,
@@ -32,17 +41,11 @@ from src.utils import (  # noqa: E402
     task_wrapper,
 )
 
-if TYPE_CHECKING:
-    from pytorch_lightning import LightningDataModule, LightningModule, Trainer
-    from pytorch_lightning.loggers import Logger
-
 log = RankedLogger(__name__, rank_zero_only=True)
-
-Dict2Any = Dict[str, Any]
 
 
 @task_wrapper
-def evaluate(cfg: DictConfig) -> Tuple[Dict2Any, Dict2Any]:
+def evaluate(cfg: DictConfig) -> tuple[Dict2Any, Dict2Any]:
     """Evaluates given checkpoint on a datamodule testset.
 
     This method is wrapped in optional @task_wrapper decorator, that controls the behavior during
@@ -58,7 +61,7 @@ def evaluate(cfg: DictConfig) -> Tuple[Dict2Any, Dict2Any]:
     model: LightningModule = hydra.utils.instantiate(cfg.model)
 
     log.info("Instantiating loggers...")
-    logger: List[Logger] = instantiate_loggers(cfg.get("logger"))
+    logger: list[Logger] = instantiate_loggers(cfg.get("logger"))
 
     log.info(f"Instantiating trainer <{cfg.trainer._target_}>")
     trainer: Trainer = hydra.utils.instantiate(cfg.trainer, logger=logger)

@@ -1,15 +1,20 @@
-from typing import Any, Dict
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
 
 from lightning_utilities.core.rank_zero import rank_zero_only
-from omegaconf import OmegaConf
+from omegaconf import DictConfig, OmegaConf
 
 from src.utils import pylogger
 
 log = pylogger.RankedLogger(__name__, rank_zero_only=True)
 
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
 
 @rank_zero_only
-def log_hyperparameters(object_dict: Dict[str, Any]) -> None:
+def log_hyperparameters(object_dict: Mapping[str, Any]) -> None:
     """Controls which config parts are saved by Lightning loggers.
 
     Additionally saves:
@@ -22,7 +27,7 @@ def log_hyperparameters(object_dict: Dict[str, Any]) -> None:
     """
     hparams = {}
 
-    cfg = OmegaConf.to_container(object_dict["cfg"])
+    cfg: DictConfig = OmegaConf.to_container(object_dict["cfg"])  # type:ignore
     model = object_dict["model"]
     trainer = object_dict["trainer"]
 

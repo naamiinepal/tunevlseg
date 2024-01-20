@@ -1,6 +1,3 @@
-# pyright: reportGeneralTypeIssues=false
-from typing import Any, Optional
-
 from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader, Dataset
 
@@ -8,9 +5,9 @@ from torch.utils.data import DataLoader, Dataset
 class ImageTextDatamodule(LightningDataModule):
     def __init__(
         self,
-        train_ds: Optional[Dataset] = None,
-        val_ds: Optional[Dataset] = None,
-        test_ds: Optional[Dataset] = None,
+        train_ds: Dataset | None = None,
+        val_ds: Dataset | None = None,
+        test_ds: Dataset | None = None,
         batch_size: int = 32,
         num_workers: int = 4,
         pin_memory: bool = True,
@@ -28,7 +25,7 @@ class ImageTextDatamodule(LightningDataModule):
         # also ensures init params will be stored in ckpt
         self.save_hyperparameters()
 
-    def setup(self, stage: Optional[str] = None) -> None:
+    def setup(self, stage: str | None = None) -> None:
         """Load data. Set variables: `self.data_train`, `self.data_val`, `self.data_test`.
 
         This method is called by Lightning before `trainer.fit()`, `trainer.validate()`, `trainer.test()`, and
@@ -38,53 +35,53 @@ class ImageTextDatamodule(LightningDataModule):
 
         :param stage: The stage to setup. Either `"fit"`, `"validate"`, `"test"`, or `"predict"`. Defaults to ``None``.
         """
-        self.batch_size_per_device = self.hparams.batch_size
+        self.batch_size_per_device: int = self.hparams.batch_size  # type: ignore
 
         if self.trainer is not None:
-            if self.hparams.batch_size % self.trainer.world_size != 0:  # pyright: ignore [reportOptionalOperand]
-                msg = f"Batch size ({self.hparams.batch_size}) is not divisible by the number of devices ({self.trainer.world_size})."
+            if self.hparams.batch_size % self.trainer.world_size != 0:  # type:ignore
+                msg = f"Batch size ({self.hparams.batch_size}) is not divisible by the number of devices ({self.trainer.world_size})."  # type:ignore
                 raise ValueError(
                     msg,
                 )
             # Divide batch size by the number of devices.
-            self.batch_size_per_device //= self.trainer.world_size  # pyright: ignore [reportOptionalOperand]
+            self.batch_size_per_device //= self.trainer.world_size  # type:ignore
 
-    def train_dataloader(self) -> DataLoader[Any]:
+    def train_dataloader(self) -> DataLoader:
         """Create and return the train dataloader.
 
         :return: The train dataloader.
         """
         return DataLoader(
-            dataset=self.hparams.train_ds,
+            dataset=self.hparams.train_ds,  # type:ignore
             batch_size=self.batch_size_per_device,
-            num_workers=self.hparams.num_workers,
-            pin_memory=self.hparams.pin_memory,
-            drop_last=self.hparams.drop_last,
+            num_workers=self.hparams.num_workers,  # type:ignore
+            pin_memory=self.hparams.pin_memory,  # type:ignore
+            drop_last=self.hparams.drop_last,  # type:ignore
             shuffle=True,
         )
 
-    def val_dataloader(self) -> DataLoader[Any]:
+    def val_dataloader(self) -> DataLoader:
         """Create and return the validation dataloader.
 
         :return: The validation dataloader.
         """
         return DataLoader(
-            dataset=self.hparams.val_ds,
-            batch_size=self.batch_size_per_device,
-            num_workers=self.hparams.num_workers,
-            pin_memory=self.hparams.pin_memory,
+            dataset=self.hparams.val_ds,  # type:ignore
+            batch_size=self.batch_size_per_device,  # type:ignore
+            num_workers=self.hparams.num_workers,  # type:ignore
+            pin_memory=self.hparams.pin_memory,  # type:ignore
             shuffle=False,
         )
 
-    def test_dataloader(self) -> DataLoader[Any]:
+    def test_dataloader(self) -> DataLoader:
         """Create and return the test dataloader.
 
         :return: The test dataloader.
         """
         return DataLoader(
-            dataset=self.hparams.test_ds,
+            dataset=self.hparams.test_ds,  # type:ignore
             batch_size=self.batch_size_per_device,
-            num_workers=self.hparams.num_workers,
-            pin_memory=self.hparams.pin_memory,
+            num_workers=self.hparams.num_workers,  # type:ignore
+            pin_memory=self.hparams.pin_memory,  # type:ignore
             shuffle=False,
         )

@@ -1,12 +1,19 @@
+from __future__ import annotations
+
 import warnings
 from importlib.util import find_spec
-from typing import Any, Callable, Dict, Optional, Tuple
-
-from omegaconf import DictConfig
+from typing import TYPE_CHECKING, Any
 
 from src.utils import pylogger, rich_utils
 
 log = pylogger.RankedLogger(__name__, rank_zero_only=True)
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping
+
+    from omegaconf import DictConfig
+
+    DictStr2Any = dict[str, Any]
 
 
 def extras(cfg: DictConfig) -> None:
@@ -40,7 +47,7 @@ def extras(cfg: DictConfig) -> None:
         rich_utils.print_config_tree(cfg, resolve=True, save_to_file=True)
 
 
-def task_wrapper(task_func: Callable) -> Callable:
+def task_wrapper(task_func: Callable[..., tuple[DictStr2Any, DictStr2Any]]) -> Callable:
     """Optional decorator that controls the failure behavior when executing the task function.
 
     This wrapper can be used to:
@@ -63,7 +70,7 @@ def task_wrapper(task_func: Callable) -> Callable:
     :return: The wrapped task function.
     """
 
-    def wrap(cfg: DictConfig) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    def wrap(cfg: DictConfig) -> tuple[DictStr2Any, DictStr2Any]:
         # execute the task
         try:
             metric_dict, object_dict = task_func(cfg=cfg)
@@ -97,9 +104,9 @@ def task_wrapper(task_func: Callable) -> Callable:
 
 
 def get_metric_value(
-    metric_dict: Dict[str, Any],
-    metric_name: Optional[str],
-) -> Optional[float]:
+    metric_dict: Mapping[str, Any],
+    metric_name: str | None,
+) -> float | None:
     """Safely retrieves value of the metric logged in LightningModule.
 
     :param metric_dict: A dict containing metric values.
@@ -116,9 +123,7 @@ def get_metric_value(
             "Make sure metric name logged in LightningModule is correct!\n"
             "Make sure `optimized_metric` name in `hparams_search` config is correct!"
         )
-        raise Exception(
-            msg,
-        )
+        raise ValueError(msg)
 
     metric_value = metric_dict[metric_name].item()
     log.info(f"Retrieved metric value! <{metric_name}={metric_value}>")

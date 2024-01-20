@@ -1,7 +1,7 @@
-# pyright: reportGeneralTypeIssues=false
+from __future__ import annotations
+
 from functools import lru_cache
-from pathlib import Path
-from typing import Mapping, Union
+from typing import TYPE_CHECKING
 
 import torch
 from torch import nn
@@ -10,8 +10,12 @@ from .decoder import TransDecoder
 from .text_encoder import TransTextEncoder
 from .vision_encoder import TransVisionEncoder
 
-StrOrPath = Union[str, Path]
-StrToAny = Mapping[str, torch.Tensor]
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+    from pathlib import Path
+
+    StrOrPath = str | Path
+    StrToAny = Mapping[str, torch.Tensor]
 
 
 class TransformerSegmentor(nn.Module):
@@ -50,7 +54,8 @@ class TransformerSegmentor(nn.Module):
 
         # Freeze image encoder if needed
         self.image_encoder = TransVisionEncoder(
-            image_pretrained_model_name_or_path, image_size=image_size,
+            image_pretrained_model_name_or_path,
+            image_size=image_size,
         ).requires_grad_(not freeze_image_encoder)
 
         img_config = self.image_encoder.config
@@ -63,7 +68,7 @@ class TransformerSegmentor(nn.Module):
         )
 
         # Freeze text encoder if needed, not but not the projection layer
-        self.text_encoder.model.requires_grad_(not freeze_text_encoder)
+        self.text_encoder.model.requires_grad_(not freeze_text_encoder)  # type:ignore
 
         self.decoder = TransDecoder(
             image_hidden_size=image_hidden_size,
@@ -79,7 +84,7 @@ class TransformerSegmentor(nn.Module):
             self.get_with_pos_enc if add_pos_enc else nn.Identity()
         )
 
-    def forward(self, text_input: StrToAny, image_input: torch.Tensor):
+    def forward(self, text_input: StrToAny, image_input: torch.Tensor) -> torch.Tensor:
         # shape: (B, N_t, H_i)
         text_proj_output = self.text_encoder(**text_input)
 
@@ -104,7 +109,7 @@ class TransformerSegmentor(nn.Module):
         )
 
     @staticmethod
-    def get_with_pos_enc(x: torch.Tensor):
+    def get_with_pos_enc(x: torch.Tensor) -> torch.Tensor:
         # Get the number of tokens and hidden size
         _, N, H = x.shape
 
@@ -125,14 +130,12 @@ class TransformerSegmentor(nn.Module):
     def get_posenc(
         d_model: int,
         token_length: int,
-        device: torch.device = None,
-        dtype: torch.dtype = None,
+        device: torch.device | None = None,
+        dtype: torch.dtype | None = None,
     ) -> torch.Tensor:
         if d_model % 2 != 0:
             msg = f"Cannot use sin/cos positional encoding with odd dim (got dim={d_model})"
-            raise ValueError(
-                msg,
-            )
+            raise ValueError(msg)
 
         # Create a tensor of shape (token_length, d_model)
         posenc = torch.zeros(token_length, d_model, device=device, dtype=dtype)

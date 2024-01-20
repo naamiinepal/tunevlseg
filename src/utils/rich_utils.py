@@ -1,17 +1,22 @@
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Sequence
+from typing import TYPE_CHECKING
 
 import rich
-import rich.syntax
-import rich.tree
 from hydra.core.hydra_config import HydraConfig
 from lightning_utilities.core.rank_zero import rank_zero_only
 from omegaconf import DictConfig, OmegaConf, open_dict
 from rich.prompt import Prompt
+from rich.syntax import Syntax
+from rich.tree import Tree
 
 from src.utils import pylogger
 
 log = pylogger.RankedLogger(__name__, rank_zero_only=True)
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
 @rank_zero_only
@@ -37,8 +42,9 @@ def print_config_tree(
     :param resolve: Whether to resolve reference fields of DictConfig. Default is ``False``.
     :param save_to_file: Whether to export config to the hydra output folder. Default is ``False``.
     """
-    style = "dim"
-    tree = rich.tree.Tree("CONFIG", style=style, guide_style=style)
+    STYLE = "dim"
+
+    tree = Tree("CONFIG", style=STYLE, guide_style=STYLE)
 
     queue = []
 
@@ -49,28 +55,28 @@ def print_config_tree(
         )
 
     # add all the other fields to queue (not specified in `print_order`)
-    for field in cfg:
-        if field not in queue:
-            queue.append(field)
+    queue.extend(field for field in cfg if field not in queue)
 
     # generate config tree from queue
     for field in queue:
-        branch = tree.add(field, style=style, guide_style=style)
+        branch = tree.add(field, style=STYLE, guide_style=STYLE)
 
         config_group = cfg[field]
-        if isinstance(config_group, DictConfig):
-            branch_content = OmegaConf.to_yaml(config_group, resolve=resolve)
-        else:
-            branch_content = str(config_group)
 
-        branch.add(rich.syntax.Syntax(branch_content, "yaml"))
+        branch_content = (
+            OmegaConf.to_yaml(config_group, resolve=resolve)
+            if isinstance(config_group, DictConfig)
+            else str(config_group)
+        )
+
+        branch.add(Syntax(branch_content, "yaml"))
 
     # print config tree
     rich.print(tree)
 
     # save config tree to file
     if save_to_file:
-        with open(Path(cfg.paths.output_dir, "config_tree.log"), "w") as file:
+        with Path(cfg.paths.output_dir, "config_tree.log").open("w") as file:
             rich.print(tree, file=file)
 
 
@@ -82,7 +88,8 @@ def enforce_tags(cfg: DictConfig, save_to_file: bool = False) -> None:
     :param save_to_file: Whether to export tags to the hydra output folder. Default is ``False``.
     """
     if not cfg.get("tags"):
-        if "id" in HydraConfig().cfg.hydra.job:
+        hydra_config_cfg = HydraConfig().cfg
+        if hydra_config_cfg is not None and "id" in hydra_config_cfg.hydra.job:  # type:ignore
             msg = "Specify tags before launching a multirun!"
             raise ValueError(msg)
 
@@ -96,5 +103,5 @@ def enforce_tags(cfg: DictConfig, save_to_file: bool = False) -> None:
         log.info(f"Tags: {cfg.tags}")
 
     if save_to_file:
-        with open(Path(cfg.paths.output_dir, "tags.log"), "w") as file:
+        with Path(cfg.paths.output_dir, "tags.log").open("w") as file:
             rich.print(cfg.tags, file=file)

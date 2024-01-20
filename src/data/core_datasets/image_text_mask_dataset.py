@@ -1,18 +1,24 @@
 # pyright: reportGeneralTypeIssues=false
+from __future__ import annotations
+
 import json
 import random
 from pathlib import Path
-from typing import Callable, List, Mapping, Optional, Union
+from typing import TYPE_CHECKING, Any
 
 import cv2
-from cv2.typing import MatLike
 from torch.utils.data import Dataset
 from transformers import AutoTokenizer
 
-StrOrPath = Union[str, Path]
-PromptType = Union[str, List[str]]
-PromptMappingType = Mapping[str, PromptType]
-TransformType = Callable[[MatLike, MatLike], Mapping[str, MatLike]]
+if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping
+
+    from cv2.typing import MatLike
+
+    StrOrPath = str | Path
+    PromptType = str | list[str]
+    PromptMappingType = Mapping[str, PromptType]
+    TransformType = Callable[[MatLike, MatLike], Mapping[str, MatLike]]
 
 
 class ImageTextDataset(Dataset):
@@ -23,7 +29,7 @@ class ImageTextDataset(Dataset):
         task_path: StrOrPath,
         pretrained_model_name_or_path: StrOrPath,
         prompt_index: int,
-        transform: Optional[TransformType] = None,
+        transform: TransformType | None = None,
     ) -> None:
         self.img_root = Path(img_root)
         self.mask_root = Path(mask_root)
@@ -35,11 +41,11 @@ class ImageTextDataset(Dataset):
         self.prompt_map_index = f"p{prompt_index}"
 
         with open(task_path) as fp:
-            self.tasks: List[Mapping[str, Union[str, PromptMappingType]]] = json.load(
+            self.tasks: list[Mapping[str, str | PromptMappingType]] = json.load(
                 fp,
             )
 
-    def __getitem__(self, index: int):
+    def __getitem__(self, index: int) -> dict[str, Any]:
         task = self.tasks[index]
 
         img_name: str = task["img_name"]

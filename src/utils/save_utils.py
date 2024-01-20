@@ -1,22 +1,28 @@
-from logging import LoggerAdapter
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Iterable, List, Optional
+from typing import TYPE_CHECKING, Any
 
 import torch
 import torchvision.utils
-from omegaconf import DictConfig
-from pytorch_lightning import LightningDataModule, LightningModule, Trainer
 from torchvision.transforms import functional as TF
 from tqdm import tqdm
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+    from logging import LoggerAdapter
+
+    from omegaconf import DictConfig
+    from pytorch_lightning import LightningDataModule, LightningModule, Trainer
 
 
 def save_predictions(
     cfg: DictConfig,
     log: LoggerAdapter,
     trainer: Trainer,
-    model: Optional[LightningModule],
-    dataloaders: Optional[LightningDataModule],
-    ckpt_path: Optional[str],
+    model: LightningModule | None,
+    dataloaders: LightningDataModule | None,
+    ckpt_path: str | None,
 ) -> None:
     # Writes output masks to files
     output_masks_dir = cfg.get("output_masks_dir")
@@ -45,7 +51,7 @@ def save_predictions(
             return
 
     log.info("Generating prediction masks of test dataset")
-    pred_outputs: Iterable[dict] = trainer.predict(
+    pred_outputs: Iterable[dict[str, Any]] = trainer.predict(
         model=model,
         dataloaders=dataloaders,
         ckpt_path=ckpt_path,
@@ -76,7 +82,7 @@ def save_predictions(
                 # `mask_name` may contain directories, so making sure they exist
                 file_path.parent.mkdir(parents=True, exist_ok=True)
 
-                mask_shape_list: List[int] = (
+                mask_shape_list: list[int] = (
                     mask_shape.tolist()
                     if isinstance(mask_shape, torch.Tensor)
                     else list(mask_shape)

@@ -1,9 +1,10 @@
-# pyright: reportGeneralTypeIssues=false
+from __future__ import annotations
+
 import json
 import random
 from collections import defaultdict
 from pathlib import Path
-from typing import Callable, List, Literal, Mapping, Optional, Set, Tuple, Union
+from typing import TYPE_CHECKING, Any, Literal
 
 import cv2
 import numpy as np
@@ -11,11 +12,17 @@ from matplotlib import pyplot as plt
 from torch.utils.data import Dataset
 from transformers import AutoTokenizer
 
-StrPath = Union[str, Path]
+if TYPE_CHECKING:
+    from collections.abc import Callable, Mapping
 
-TaskType = Mapping[Literal["task_id", "phrase"], str]
-PromptMethodType = Literal["fixed", "shuffle", "shuffle+"]
-Str2SetInt = Mapping[str, Set[int]]
+    import torch
+    from cv2.typing import MatLike
+
+    StrPath = str | Path
+
+    TaskType = Mapping[Literal["task_id", "phrase"], str]
+    PromptMethodType = Literal["fixed", "shuffle", "shuffle+"]
+    Str2SetInt = Mapping[str, set[int]]
 
 
 class PhraseCutDataset(Dataset):
@@ -26,8 +33,8 @@ class PhraseCutDataset(Dataset):
         tokenizer_pretrained_path: StrPath,
         image_dir: StrPath = "images",
         mask_dir: StrPath = "masks",
-        transforms: Optional[Callable] = None,
-        return_tensors: Optional[Literal["tf", "pt", "np"]] = None,
+        transforms: Callable | None = None,
+        return_tensors: Literal["tf", "pt", "np"] | None = None,
         prompt_method: PromptMethodType = "fixed",
         neg_prob: float = 0,
         neg_sample_tries: int = 1000,
@@ -37,7 +44,7 @@ class PhraseCutDataset(Dataset):
         data_root = Path(data_root)
 
         with (data_root / task_json_path).open() as f:
-            self.tasks: Tuple[TaskType, ...] = tuple(json.load(f))
+            self.tasks: tuple[TaskType, ...] = tuple(json.load(f))
 
         # Needed only for negative sampling and is expensive
         if neg_prob > 0:
@@ -46,7 +53,7 @@ class PhraseCutDataset(Dataset):
         else:
             # For the sake of types, keep them empty
             self.phrase2image_ids: Str2SetInt = {}
-            self.unique_phrases: Tuple[str, ...] = ()
+            self.unique_phrases: tuple[str, ...] = ()
 
         self.image_path = data_root / image_dir
         self.mask_path = data_root / mask_dir
@@ -63,7 +70,7 @@ class PhraseCutDataset(Dataset):
 
     def get_phrase2image_ids(self) -> Str2SetInt:
         # Map phrase to a list of images
-        phrase2image_ids: Mapping[str, List[int]] = defaultdict(list)
+        phrase2image_ids: dict[str, list[int]] = defaultdict(list)
 
         for task in self.tasks:
             phrase = task["phrase"]
@@ -76,12 +83,12 @@ class PhraseCutDataset(Dataset):
         return {k: set(v) for k, v in phrase2image_ids.items()}
 
     @staticmethod
-    def get_image_id_from_task_id(task_id: str):
+    def get_image_id_from_task_id(task_id: str) -> int:
         img_id, _ = task_id.split("__", 1)
         return int(img_id)
 
     @staticmethod
-    def get_prompt_list(prompt_method: PromptMethodType):
+    def get_prompt_list(prompt_method: PromptMethodType) -> tuple[str, ...]:
         prompt_format_list = ["a photo of a {}."]
 
         # For shuffle and shuffle+
@@ -110,7 +117,7 @@ class PhraseCutDataset(Dataset):
     def __len__(self) -> int:
         return len(self.tasks)
 
-    def __getitem__(self, idx: int):
+    def __getitem__(self, idx: int) -> dict[str, Any]:
         task = self.tasks[idx]
 
         task_id = task["task_id"]
@@ -164,7 +171,10 @@ class PhraseCutDataset(Dataset):
             **text_inputs,
         }
 
-    def get_text_output(self, phrase: str):
+    def get_text_output(
+        self,
+        phrase: str,
+    ) -> dict[str, list[int]] | dict[str, np.ndarray] | dict[str, torch.Tensor]:
         # Get a format randomly if prompt_format_list has more than one entries
         # If the format is fixed, the only entry is fetched making it deterministic
         prompt_format = random.choice(self.prompt_format_choices)
@@ -185,7 +195,7 @@ class PhraseCutDataset(Dataset):
 
         return {k: v[0] for k, v in text_inputs.items()}
 
-    def get_neg_phrase(self, curr_phrase: str, curr_image_id: int) -> Optional[str]:
+    def get_neg_phrase(self, curr_phrase: str, curr_image_id: int) -> str | None:
         # Use zero mask if neg_prob is greater than 1
         # Do not use mask if the neg_prob is less than 0
         if self.neg_prob >= 1 or (
@@ -206,14 +216,12 @@ class PhraseCutDataset(Dataset):
         return None
 
     @staticmethod
-    def load_image(path: StrPath, flags: int = cv2.IMREAD_UNCHANGED):
-        str_path = str(path)
-
-        img = cv2.imread(str_path, flags)
+    def load_image(path: StrPath, flags: int = cv2.IMREAD_UNCHANGED) -> MatLike:
+        img = cv2.imread(str(path), flags)
 
         if img is None:
-            msg = "Image not found in the path:"
-            raise ValueError(msg, str_path)
+            msg = f"Image not found in the path: {path}"
+            raise ValueError(msg)
 
         return img
 
@@ -222,7 +230,7 @@ class PhraseCutDataset(Dataset):
         img: np.ndarray,
         phrase: str,
         mask: np.ndarray,
-        figsize: Tuple[int, int] = (15, 5),
+        figsize: tuple[int, int] = (15, 5),
     ) -> None:
         _, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=figsize)
 

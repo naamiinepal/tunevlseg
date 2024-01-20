@@ -1,10 +1,14 @@
-from pathlib import Path
-from typing import List, Tuple
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 import torch
 from torch import nn
 from torch.nn import functional as F
 from transformers import CLIPVisionModel
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class TransVisionEncoder(nn.Module):
@@ -18,7 +22,8 @@ class TransVisionEncoder(nn.Module):
         super().__init__(*args, **kwargs)
 
         self.model: CLIPVisionModel = CLIPVisionModel.from_pretrained(
-            pretrained_model_or_path, output_hidden_states=True,
+            pretrained_model_or_path,
+            output_hidden_states=True,
         )  # type:ignore
 
         self.config = self.model.config  # type:ignore
@@ -28,7 +33,8 @@ class TransVisionEncoder(nn.Module):
 
     @torch.no_grad
     def resize_position_embedding(
-        self, new_image_size: int | Tuple[int] | List[int],
+        self,
+        new_image_size: int | tuple[int] | list[int],
     ) -> None:
         # Calculate new number of positions based on the new image size
         new_num_patches = (new_image_size // self.config.patch_size) ** 2
@@ -63,5 +69,5 @@ class TransVisionEncoder(nn.Module):
             persistent=False,
         )
 
-    def forward(self, *args, **kwargs):
+    def forward(self, *args, **kwargs) -> torch.Tensor:
         return self.model(*args, **kwargs)

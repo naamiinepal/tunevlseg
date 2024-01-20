@@ -1,12 +1,17 @@
-# pyright: reportGeneralTypeIssues=false
-import math
-from typing import Any, Mapping, Optional, Tuple, Union
+from __future__ import annotations
 
-import torch
+import math
+from typing import TYPE_CHECKING, Any
+
 from torch import nn
 
-IntorIntTuple = Union[Tuple[int, int], int]
-StrToAny = Mapping[str, Any]
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    import torch
+
+    IntorIntTuple = tuple[int, int] | int
+    StrToAny = Mapping[str, Any]
 
 
 class TransDecoder(nn.Module):
@@ -52,7 +57,12 @@ class TransDecoder(nn.Module):
             num_output_channels=num_output_channels,
         )
 
-    def forward(self, skip_connection_tensor: torch.Tensor, *args, **kwargs):
+    def forward(
+        self,
+        skip_connection_tensor: torch.Tensor,
+        *args,
+        **kwargs,
+    ) -> torch.Tensor:
         # shape: (B, N_i + 1, H_i)
         trans_output: torch.Tensor = self.transformer_decoder(*args, **kwargs)
 
@@ -85,7 +95,7 @@ class TransDecoder(nn.Module):
         image_hidden_size: int,
         decoder_layer_kwargs: StrToAny,
         num_decoder_layers: int,
-    ):
+    ) -> nn.TransformerDecoder:
         """Get the transformer decoder.
 
         Args:
@@ -118,7 +128,7 @@ class TransDecoder(nn.Module):
         image_hidden_size: int,
         final_image_size: int,
         num_output_channels: int,
-    ):
+    ) -> nn.Sequential:
         """Gets the upsampler block to reduce the hidden channels to `num_output_channels` and increase the spatial dimension of output.
 
         Args:
@@ -169,13 +179,13 @@ class TransDecoder(nn.Module):
     def get_upsample_block(
         in_channels: int,
         out_channels: int,
-        size: Optional[int] = None,
-        scale_factor: Optional[float] = None,
+        size: int | None = None,
+        scale_factor: float | None = None,
         up_mode: str = "bilinear",
         kernel_size: IntorIntTuple = 3,
-        padding: Union[str, IntorIntTuple] = "same",
+        padding: str | IntorIntTuple = "same",
         padding_mode: str = "replicate",
-    ):
+    ) -> nn.Sequential:
         """Get the upsample and convolve block.
 
         Args:
@@ -196,9 +206,7 @@ class TransDecoder(nn.Module):
         """
         if size is None and scale_factor is None:
             msg = "Either the `size` of the output image or the `scale_factor` must be provided."
-            raise ValueError(
-                msg,
-            )
+            raise ValueError(msg)
 
         return nn.Sequential(
             nn.Upsample(
