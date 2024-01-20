@@ -5,10 +5,10 @@ from typing import Mapping, Union
 
 import torch
 from torch import nn
-from transformers import CLIPVisionModel
 
 from .decoder import TransDecoder
-from .encoder import TransTextEncoder
+from .text_encoder import TransTextEncoder
+from .vision_encoder import TransVisionEncoder
 
 StrOrPath = Union[str, Path]
 StrToAny = Mapping[str, torch.Tensor]
@@ -25,6 +25,7 @@ class TransformerSegmentor(nn.Module):
         decoder_layer_kwargs: StrToAny,
         num_decoder_layers: int,
         num_upsampler_layers: int,
+        image_size: int | None = None,
         num_output_channels: int = 1,
         *args,
         **kwargs,
@@ -48,8 +49,8 @@ class TransformerSegmentor(nn.Module):
         super().__init__(*args, **kwargs)
 
         # Freeze image encoder if needed
-        self.image_encoder = CLIPVisionModel.from_pretrained(
-            image_pretrained_model_name_or_path,
+        self.image_encoder = TransVisionEncoder(
+            image_pretrained_model_name_or_path, image_size=image_size,
         ).requires_grad_(not freeze_image_encoder)
 
         img_config = self.image_encoder.config
@@ -58,9 +59,11 @@ class TransformerSegmentor(nn.Module):
 
         self.text_encoder = TransTextEncoder(
             pretrained_model_name_or_path=text_pretrained_model_name_or_path,
-            freeze_clip=freeze_text_encoder,
             image_hidden_size=image_hidden_size,
         )
+
+        # Freeze text encoder if needed, not but not the projection layer
+        self.text_encoder.model.requires_grad_(not freeze_text_encoder)
 
         self.decoder = TransDecoder(
             image_hidden_size=image_hidden_size,
@@ -86,12 +89,16 @@ class TransformerSegmentor(nn.Module):
         # shape: (B, N_i, H_i)
         image_last_hidden_state = image_output_obj.last_hidden_state
 
+        # shape: (B, N_i, H_i)
+        image_first_hidden_state = image_output_obj.hidden_states[0]
+
         # Apply positional encoding, if needed
         text_with_pos_enc = self.add_pos_enc_or_identity(text_proj_output)
         image_with_pos_enc = self.add_pos_enc_or_identity(image_last_hidden_state)
 
         # shape: (B, num_output_channels, H, W)
         return self.decoder(
+            skip_connection_tensor=image_first_hidden_state,
             tgt=image_with_pos_enc,
             memory=text_with_pos_enc,
         )
@@ -99,7 +106,7 @@ class TransformerSegmentor(nn.Module):
     @staticmethod
     def get_with_pos_enc(x: torch.Tensor):
         # Get the number of tokens and hidden size
-        B, N, H = x.shape
+        _, N, H = x.shape
 
         # Get positional encoding
         posenc = TransformerSegmentor.get_posenc(
@@ -113,7 +120,7 @@ class TransformerSegmentor(nn.Module):
         return x + posenc
 
     @staticmethod
-    @lru_cache
+    @lru_cache(maxsize=4)
     @torch.no_grad()
     def get_posenc(
         d_model: int,

@@ -158,7 +158,9 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--mask-output-dir", required=True, help="The directory to output the masks.",
+        "--mask-output-dir",
+        required=True,
+        help="The directory to output the masks.",
     )
 
     parser.add_argument(

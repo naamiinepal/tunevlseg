@@ -52,13 +52,13 @@ class TransDecoder(nn.Module):
             num_output_channels=num_output_channels,
         )
 
-    def forward(self, *args, **kwargs):
+    def forward(self, skip_connection_tensor: torch.Tensor, *args, **kwargs):
         # shape: (B, N_i + 1, H_i)
         trans_output: torch.Tensor = self.transformer_decoder(*args, **kwargs)
 
-        # Remove the poolled output
+        # Add skip connection from CLIPVisionEncoder and remove the pooled output
         # shape: (B, N_i, H_i)
-        image_output = trans_output[:, 1:, :]
+        image_output = skip_connection_tensor[:, 1:, :] + trans_output[:, 1:, :]
 
         # Move the hidden dimension to make it channel first
         # shape: (B, H_i, N_i)
@@ -145,7 +145,7 @@ class TransDecoder(nn.Module):
             out_channels = in_channels - channel_factor
             layers.extend(
                 (
-                    *TransDecoder.get_upsample_block(
+                    TransDecoder.get_upsample_block(
                         scale_factor=up_factor,
                         in_channels=in_channels,
                         out_channels=out_channels,
@@ -158,7 +158,7 @@ class TransDecoder(nn.Module):
 
         return nn.Sequential(
             *layers,
-            *TransDecoder.get_upsample_block(
+            TransDecoder.get_upsample_block(
                 size=final_image_size,
                 in_channels=in_channels,
                 out_channels=num_output_channels,
@@ -200,7 +200,7 @@ class TransDecoder(nn.Module):
                 msg,
             )
 
-        return (
+        return nn.Sequential(
             nn.Upsample(
                 size=size,
                 scale_factor=scale_factor,
