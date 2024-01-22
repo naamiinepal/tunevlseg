@@ -45,12 +45,14 @@ class TransVisionEncoder(nn.Module):
         old_position_embedding_weight = embeddings.position_embedding.weight.data
 
         # Resize position embedding weights using linear interpolation
+        # Other available interpolation methods include: nearest, area, nearest-exact
         resized_weights = (
             F.interpolate(
                 old_position_embedding_weight.T.unsqueeze(0),
                 size=new_num_positions,
                 mode="linear",
                 align_corners=False,
+                antialias=False,
             )
             .squeeze(0)
             .T
@@ -65,7 +67,11 @@ class TransVisionEncoder(nn.Module):
 
         embeddings.register_buffer(
             "position_ids",
-            torch.arange(new_num_positions).unsqueeze(0),
+            torch.arange(
+                new_num_positions,
+                dtype=embeddings.position_ids.dtype,
+                device=embeddings.position_ids.device,
+            ).unsqueeze(0),
             persistent=False,
         )
 
