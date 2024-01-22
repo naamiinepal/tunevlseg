@@ -46,11 +46,17 @@ def process_task(task: TaskType, image_root: Path, mask_output_dir: Path):
     phrase: str = task["phrase"]
 
     # Use phrase to save the masks to make it readable from file browser
-    mask_name = f"{task['task_id']}-{phrase}.png"
+    safe_phrase = phrase.replace("\x00", "").replace("/", "\\")
+
+    mask_name = f"{task['task_id']}-{safe_phrase}.png"
 
     output_path = mask_output_dir / mask_name
 
-    result = cv2.imwrite(str(output_path), mask, [cv2.IMWRITE_PNG_COMPRESSION, 9])
+    try:
+        result = cv2.imwrite(str(output_path), mask, [cv2.IMWRITE_PNG_COMPRESSION, 9])
+    except cv2.error as e:
+        msg = f"Got an exception while saving the file: {e} for task: {task}"
+        raise RuntimeError(msg)
 
     if not result:
         msg = f"Can not save mask to path {output_path}."
@@ -65,7 +71,8 @@ def main(
     mask_output_dir: StrPath,
     task_output_dir: StrPath,
     max_workers: int | None,
-) -> None:
+    verbose: bool,
+):
     image_root = Path(image_root)
 
     if not image_root.is_dir():
@@ -94,7 +101,11 @@ def main(
         return
 
     # The first split of task_id using __ is the image_id
-    filtered_tasks = [{k: task[k] for k in ("task_id", "phrase")} for task in tasks]
+    # Remove the null characters
+    filtered_tasks = [
+        {k: task[k].replace("\x00", "") for k in ("task_id", "phrase")}
+        for task in tasks
+    ]
 
     task_output_path = task_output_dir / task_json_path.name
 
@@ -128,7 +139,8 @@ def main(
                 image_id = futures_to_task[future]
                 print(f"Got an exception: {e} for image_id: {image_id}")
             else:
-                print(f"Saved mask to path {mask_path}.")
+                if verbose:
+                    print(f"Saved mask to path {mask_path}.")
 
                 unique_mask_paths.add(mask_path.name)
 
@@ -144,7 +156,7 @@ def main(
 
 
 if __name__ == "__main__":
-    from argparse import ArgumentParser
+    from argparse import ArgumentParser, BooleanOptionalAction
 
     parser = ArgumentParser(
         description="Load the task JSON, save the masks generated from the polygons provided in the tasks, and save the filtered JSON in the provided directory.",
@@ -179,6 +191,13 @@ if __name__ == "__main__":
         type=int,
         default=None,
         help="The maximum number of workers to use for multithreading.",
+    )
+
+    parser.add_argument(
+        "--verbose",
+        action=BooleanOptionalAction,
+        default=False,
+        help="Whether to print the saving of files, even if everything is working well.",
     )
 
     args = parser.parse_args()

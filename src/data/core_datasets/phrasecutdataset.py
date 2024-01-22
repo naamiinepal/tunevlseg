@@ -136,7 +136,10 @@ class PhraseCutDataset(Dataset):
         )
 
         mask_shape = image.shape[:-1]
-        mask_name = f"{task_id}-{phrase}.png"
+
+        safe_phrase = phrase.replace("/", "\\")
+
+        mask_name = f"{task_id}-{safe_phrase}.png"
 
         if new_phrase_or_none is not None:
             # Replace phrase and make mask zeros
