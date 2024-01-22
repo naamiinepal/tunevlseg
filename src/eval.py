@@ -78,8 +78,9 @@ def evaluate(cfg: DictConfig) -> tuple[Dict2Any, Dict2Any]:
         log.info("Logging hyperparameters!")
         log_hyperparameters(object_dict)
 
-    log.info("Starting testing!")
-    trainer.test(model=model, datamodule=datamodule, ckpt_path=cfg.ckpt_path)
+    if cfg.get("testing"):
+        log.info("Starting testing!")
+        trainer.test(model=model, datamodule=datamodule, ckpt_path=cfg.ckpt_path)
 
     if cfg.get("predict"):
         log.info("Starting predicting!")
