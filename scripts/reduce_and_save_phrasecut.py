@@ -15,11 +15,11 @@ if TYPE_CHECKING:
     StrPath = str | Path
 
     PolygonType = Iterable[Iterable[Iterable[tuple[int, int]]]]
-    TaskType = Mapping[str, str | PolygonType]
+    TaskType = Mapping[str, str | int | PolygonType]
 
 
 def process_task(task: TaskType, image_root: Path, mask_output_dir: Path):
-    image_id: int = task["image_id"]
+    image_id: int = task["image_id"]  # type: ignore
 
     str_path = str(image_root / f"{image_id}.jpg")
 
@@ -37,13 +37,14 @@ def process_task(task: TaskType, image_root: Path, mask_output_dir: Path):
     # Its type can be either float32 or uint8
     mask = np.zeros(mask_shape, np.uint8)
 
-    polygons: PolygonType = task["Polygons"]
+    polygons: PolygonType = task["Polygons"]  # type: ignore
+
     # Loop to add multiple polygons to the mask
     for poly in polygons:
-        pts = [np.around(p).astype(np.int32) for p in poly]
-        cv2.fillPoly(mask, pts, 255)
+        pts = [np.around(p).astype(np.int32) for p in poly]  # type: ignore
+        cv2.fillPoly(mask, pts, 255)  # type: ignore
 
-    phrase: str = task["phrase"]
+    phrase: str = task["phrase"]  # type: ignore
 
     # Use phrase to save the masks to make it readable from file browser
     safe_phrase = phrase.replace("\x00", "").replace("/", "\\")
@@ -56,13 +57,35 @@ def process_task(task: TaskType, image_root: Path, mask_output_dir: Path):
         result = cv2.imwrite(str(output_path), mask, [cv2.IMWRITE_PNG_COMPRESSION, 9])
     except cv2.error as e:
         msg = f"Got an exception while saving the file: {e} for task: {task}"
-        raise RuntimeError(msg)
+        raise RuntimeError(msg) from e
 
     if not result:
         msg = f"Can not save mask to path {output_path}."
         raise RuntimeError(msg)
 
     return output_path
+
+
+def save_filtered_tasks(tasks: list[TaskType], task_output_path: Path) -> bool:
+    # The first split of task_id using __ is the image_id
+    # Remove the null characters
+    filtered_tasks: dict[str, str] = [
+        {k: task[k].replace("\x00", "") for k in ("task_id", "phrase")}  # type: ignore
+        for task in tasks
+    ]
+
+    if task_output_path.exists():
+        ip = input(
+            f"\n{task_output_path} already exists: Do you want to overwrite it? (y/N): ",
+        )
+
+        if ip.lower() != "y":
+            return False
+
+    with task_output_path.open("w") as of:
+        json.dump(filtered_tasks, of)
+
+    return True
 
 
 def main(
@@ -100,28 +123,7 @@ def main(
         print("No task provided in:", task_json_path)
         return
 
-    # The first split of task_id using __ is the image_id
-    # Remove the null characters
-    filtered_tasks = [
-        {k: task[k].replace("\x00", "") for k in ("task_id", "phrase")}
-        for task in tasks
-    ]
-
-    task_output_path = task_output_dir / task_json_path.name
-
-    save_task = True
-
-    if task_output_path.exists():
-        ip = input(
-            f"\n{task_output_path} already exists: Do you want to overwrite it? (y/N): ",
-        )
-
-        if ip.lower() != "y":
-            save_task = False
-
-    if save_task:
-        with task_output_path.open("w") as of:
-            json.dump(filtered_tasks, of)
+    save_filtered_tasks(tasks, task_output_dir / task_json_path.name)
 
     with concurrent.futures.ThreadPoolExecutor(max_workers) as executor:
         futures_to_task = {
