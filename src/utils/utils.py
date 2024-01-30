@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import warnings
 from importlib.util import find_spec
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any
 
 from src.utils import pylogger, rich_utils
 
@@ -13,10 +13,10 @@ if TYPE_CHECKING:
 
     from omegaconf import DictConfig
 
-    DictStr2Any = dict[str, Any]
+    DictStr2Any = dict[str, object]
 
     FReturnType = tuple[DictStr2Any, DictStr2Any]
-    TaskWrapperFunc = TypeVar("TaskWrapperFunc", bound=Callable[..., FReturnType])
+    TaskWrapperFunc = Callable[[DictConfig], FReturnType]
 
 
 def extras(cfg: DictConfig) -> None:
@@ -71,13 +71,13 @@ def task_wrapper(task_func: TaskWrapperFunc) -> TaskWrapperFunc:
     :param task_func: The task function to be wrapped.
 
     :return: The wrapped task function.
+
     """
 
-    def wrap(cfg: DictConfig) -> FReturnType:
+    def wrap(cfg: DictConfig):
         # execute the task
         try:
-            metric_dict, object_dict = task_func(cfg=cfg)
-
+            output = task_func(cfg)
         # things to do if exception occurs
         except Exception:
             # save exception to `.log` file
@@ -87,7 +87,6 @@ def task_wrapper(task_func: TaskWrapperFunc) -> TaskWrapperFunc:
             # so when using hparam search plugins like Optuna, you might want to disable
             # raising the below exception to avoid multirun failure
             raise
-
         # things to always do after either success or exception
         finally:
             # display output dir path in terminal
@@ -101,9 +100,9 @@ def task_wrapper(task_func: TaskWrapperFunc) -> TaskWrapperFunc:
                     log.info("Closing wandb!")
                     wandb.finish()
 
-        return metric_dict, object_dict
+        return output
 
-    return wrap  # type:ignore
+    return wrap
 
 
 def get_metric_value(

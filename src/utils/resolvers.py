@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import functools
-from collections.abc import Callable
 from importlib import import_module
-from typing import TypeVar
+from typing import TYPE_CHECKING, ParamSpec, TypeVar
 
 from omegaconf import OmegaConf
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    T = TypeVar("T")
+    P = ParamSpec("P")
 
 
 def import_resolver(string: str):
@@ -22,6 +27,7 @@ def import_resolver(string: str):
     Returns:
     -------
         Any: The imported and resolved object.
+
     """
     splitted = string.split(".", 1)
     if len(splitted) != 2:
@@ -42,10 +48,7 @@ def import_resolver(string: str):
     return imported_module
 
 
-ResolverFuncType = TypeVar("ResolverFuncType", bound=Callable[..., object])
-
-
-def register_new_resolvers(func: ResolverFuncType) -> ResolverFuncType:
+def register_new_resolvers(func: Callable[P, T]) -> Callable[P, T]:
     """Register new resolvers for omegaconf.
 
     Args:
@@ -55,10 +58,11 @@ def register_new_resolvers(func: ResolverFuncType) -> ResolverFuncType:
     Returns:
     -------
         The same fuction passed but with new omegaconf resolvers registered
+
     """
 
     @functools.wraps(func)
-    def inner_func(*args, **kwargs):
+    def inner_func(*args: P.args, **kwargs: P.kwargs) -> T:
         # Register a resolver to evaluate in the yaml file
         OmegaConf.register_new_resolver("literal_eval", eval)
 
@@ -68,4 +72,4 @@ def register_new_resolvers(func: ResolverFuncType) -> ResolverFuncType:
 
         return func(*args, **kwargs)
 
-    return inner_func  # type:ignore
+    return inner_func

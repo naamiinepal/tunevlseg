@@ -345,6 +345,7 @@ class ImageTextMaskModule(LightningModule):
             https://lightning.ai/docs/pytorch/latest/common/lightning_module.html#configure-optimizers
 
         :return: A dict containing the configured optimizers and learning-rate schedulers to be used for training.
+
         """
         optim_groups = self.get_optim_groups()
         optimizer = self.optimizer(optim_groups)  # type: ignore

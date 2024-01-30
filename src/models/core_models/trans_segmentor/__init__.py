@@ -49,6 +49,7 @@ class TransformerSegmentor(nn.Module):
             image_size: The final image size to align the output exactly to the input.
             num_output_channels: The number of channels in he output.
                 This defaults to `1`  for the binary segmentation task.
+
         """
         super().__init__(*args, **kwargs)
 

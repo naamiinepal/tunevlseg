@@ -40,6 +40,7 @@ class TransDecoder(nn.Module):
             final_image_size: The final image size to align the output exactly to the input.
             num_output_channels: The number of channels in he output.
                 This defaults to `1`  for the binary segmentation task.
+
         """
         super().__init__(*args, **kwargs)
 
@@ -130,6 +131,7 @@ class TransDecoder(nn.Module):
         Returns:
         -------
             The transformer decoder block with `num_decoder_layers` transformer decoder layers.
+
         """
         decoder_layer = nn.TransformerDecoderLayer(
             image_hidden_size,
@@ -166,6 +168,7 @@ class TransDecoder(nn.Module):
         Returns:
         -------
             Get sequential mode with `num_upsampler_layers` upsampler layers.
+
         """
         up_factor = patch_size ** (1 / num_upsampler_layers)
 
@@ -226,6 +229,7 @@ class TransDecoder(nn.Module):
         Returns:
         -------
             Tuple of Upsample and 2D Convolution layers
+
         """
         if size is None and scale_factor is None:
             msg = "Either the `size` of the output image or the `scale_factor` must be provided."

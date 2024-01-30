@@ -26,6 +26,7 @@ class TransTextEncoder(nn.Module):
             pretrained_model_name_or_path: The name to the pretrained model or path to the saved model
             image_hidden_size: The dimension to project the output of the text encoder.
                 If it matches to that of text encoder, no projection layer is used.
+
         """
         super().__init__(*args, **kwargs)
 

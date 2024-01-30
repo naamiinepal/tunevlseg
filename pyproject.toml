@@ -21,7 +21,7 @@ exclude_lines = [
 ]
 
 [tool.ruff]
-select = [
+lint.select = [
   # pycodestyle
   "E",
   # Pyflakes
@@ -47,7 +47,7 @@ select = [
 ]
 
 # Avoid enforcing line-length violations (`E501`)
-ignore = ["E501"]
+lint.ignore = ["E501"]
 
 # Assume Python 3.10
 target-version = "py310"
