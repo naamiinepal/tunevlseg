@@ -46,7 +46,7 @@ class TransformerSegmentor(nn.Module):
             decoder_layer_kwargs: The keyword arguments to the transformer decoder. `n_head` is the required one.
             num_decoder_layers: The number of transformer decoder layers.
             num_upsampler_layers: The number of upsample and conv2d blocks to upsample.
-            final_image_size: The final image size to align the output exactly to the input.
+            image_size: The final image size to align the output exactly to the input.
             num_output_channels: The number of channels in he output.
                 This defaults to `1`  for the binary segmentation task.
         """
@@ -70,13 +70,15 @@ class TransformerSegmentor(nn.Module):
         # Freeze text encoder if needed, not but not the projection layer
         self.text_encoder.model.requires_grad_(not freeze_text_encoder)  # type:ignore
 
+        final_image_size: int = image_size or img_config.image_size
+
         self.decoder = TransDecoder(
             image_hidden_size=image_hidden_size,
             decoder_layer_kwargs=decoder_layer_kwargs,
             num_decoder_layers=num_decoder_layers,
             patch_size=img_config.patch_size,
             num_upsampler_layers=num_upsampler_layers,
-            final_image_size=img_config.image_size,
+            final_image_size=final_image_size,
             num_output_channels=num_output_channels,
         )
 

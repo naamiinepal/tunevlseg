@@ -16,6 +16,8 @@ if TYPE_CHECKING:
 
     DictStr2Any = dict[str, Any]
 
+    FReturnType = tuple[DictStr2Any, DictStr2Any]
+    TaskWrapperFunc = TypeVar("TaskWrapperFunc", bound=Callable[..., FReturnType])
 
 def extras(cfg: DictConfig) -> None:
     """Applies optional utilities before the task is started.
@@ -46,10 +48,6 @@ def extras(cfg: DictConfig) -> None:
     if cfg.extras.get("print_config"):
         log.info("Printing config tree with Rich! <cfg.extras.print_config=True>")
         rich_utils.print_config_tree(cfg, resolve=True, save_to_file=True)
-
-
-FReturnType = tuple[DictStr2Any, DictStr2Any]
-TaskWrapperFunc = TypeVar("TaskWrapperFunc", bound=Callable[..., FReturnType])
 
 
 def task_wrapper(task_func: TaskWrapperFunc) -> TaskWrapperFunc:
