@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import torch
 from torch import nn
@@ -15,7 +15,6 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     StrOrPath = str | Path
-    StrToAny = Mapping[str, torch.Tensor]
 
 
 class TransformerSegmentor(nn.Module):
@@ -26,7 +25,7 @@ class TransformerSegmentor(nn.Module):
         freeze_image_encoder: bool,
         freeze_text_encoder: bool,
         add_pos_enc: bool,
-        decoder_layer_kwargs: StrToAny,
+        decoder_layer_kwargs: Mapping[str, Any],
         num_decoder_layers: int,
         num_upsampler_layers: int,
         image_size: int | None = None,
@@ -87,7 +86,9 @@ class TransformerSegmentor(nn.Module):
             self.get_with_pos_enc if add_pos_enc else nn.Identity()
         )
 
-    def forward(self, text_input: StrToAny, image_input: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self, text_input: Mapping[str, torch.Tensor], image_input: torch.Tensor
+    ) -> torch.Tensor:
         # shape: (B, N_t, H_i)
         text_proj_output = self.text_encoder(**text_input)
 
