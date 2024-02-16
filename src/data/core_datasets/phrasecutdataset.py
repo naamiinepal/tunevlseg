@@ -4,7 +4,7 @@ import json
 import random
 from collections import defaultdict
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, TypeVar
 
 import cv2
 import numpy as np
@@ -24,6 +24,8 @@ if TYPE_CHECKING:
     PromptMethodType = Literal["fixed", "shuffle", "shuffle+"]
     Str2SetInt = Mapping[str, set[int]]
 
+    ImageLike = TypeVar("ImageLike", np.ndarray, torch.Tensor)
+
 
 class PhraseCutDataset(Dataset):
     def __init__(
@@ -38,25 +40,24 @@ class PhraseCutDataset(Dataset):
         prompt_method: PromptMethodType = "fixed",
         neg_prob: float = 0,
         neg_sample_tries: int = 1000,
+        filter_tasks: bool = False,
     ) -> None:
         super().__init__()
 
-        data_root = Path(data_root)
-
-        with (data_root / task_json_path).open() as f:
-            self.tasks: tuple[TaskType, ...] = tuple(json.load(f))
+        self.tasks = self.load_tasks(Path(data_root, task_json_path), filter_tasks)
 
         # Needed only for negative sampling and is expensive
         if neg_prob > 0:
-            self.phrase2image_ids = self.get_phrase2image_ids()
-            self.unique_phrases = tuple(self.phrase2image_ids)
+            phrase2image_ids = self.get_phrase2image_ids()
+            self.unique_phrases = tuple(phrase2image_ids)
+            self.phrase2image_ids = phrase2image_ids
         else:
             # For the sake of types, keep them empty
             self.phrase2image_ids: Str2SetInt = {}
             self.unique_phrases: tuple[str, ...] = ()
 
-        self.image_path = data_root / image_dir
-        self.mask_path = data_root / mask_dir
+        self.image_path = Path(data_root, image_dir)
+        self.mask_path = Path(data_root, mask_dir)
 
         self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_pretrained_path)
         self.return_tensors = return_tensors
@@ -68,7 +69,63 @@ class PhraseCutDataset(Dataset):
 
         self.prompt_format_choices = self.get_prompt_list(prompt_method)
 
+    @staticmethod
+    def load_tasks(json_path: Path, filter_tasks: bool) -> tuple[TaskType, ...]:
+        """Load tasks from a json file and filter out tasks that have phrase length less than 2.
+        Also, exclude images with ids in invalid_img_ids (copied from clipseg).
+
+        Args:
+        ----
+            json_path: The path to the json file containing task_id and phrase.
+            filter_tasks: Whether to filter tasks using length and img_ids.
+
+        Returns:
+        -------
+            The filtered tasks.
+        """
+        with json_path.open() as f:
+            tasks = json.load(f)
+
+        if not filter_tasks:
+            return tuple(tasks)
+
+        # img_ids where the size in the annotations does not match actual size
+        # **copied from clipseg**
+        invalid_img_ids = (
+            61530,
+            61564,
+            150333,
+            150344,
+            150417,
+            150516,
+            285665,
+            285743,
+            285761,
+            285814,
+            286065,
+            286093,
+            498010,
+            498042,
+            498187,
+            498246,
+            498269,
+        )
+
+        return tuple(
+            task
+            for task in tasks
+            if len(task["phrase"]) > 1
+            and PhraseCutDataset.get_image_id_from_task_id(task["task_id"])
+            not in invalid_img_ids
+        )
+
     def get_phrase2image_ids(self) -> Str2SetInt:
+        """Get a mapping of phrase to a set of image ids.
+
+        Returns
+        -------
+            A mapping of phrase to a set of image ids.
+        """
         # Map phrase to a list of images
         phrase2image_ids: defaultdict[str, list[int]] = defaultdict(list)
 
@@ -84,11 +141,31 @@ class PhraseCutDataset(Dataset):
 
     @staticmethod
     def get_image_id_from_task_id(task_id: str) -> int:
+        """Get image id from task id.
+
+        Args:
+        ----
+            task_id: The task id.
+
+        Returns:
+        -------
+            Image id.
+        """
         img_id, _ = task_id.split("__", 1)
         return int(img_id)
 
     @staticmethod
     def get_prompt_list(prompt_method: PromptMethodType) -> tuple[str, ...]:
+        """Get a collecttion of prompt formats based on prompt_method.
+
+        Args:
+        ----
+            prompt_method: The prompt method.
+
+        Returns:
+        -------
+            The list of prompt formats.
+        """
         prompt_format_list = ["a photo of {}."]
 
         # For shuffle and shuffle+
@@ -186,8 +263,17 @@ class PhraseCutDataset(Dataset):
         self,
         phrase: str,
     ) -> dict[str, list[int]] | dict[str, np.ndarray] | dict[str, torch.Tensor]:
-        # Get a format randomly if prompt_format_list has more than one entries
-        # If the format is fixed, the only entry is fetched making it deterministic
+        """Get a format randomly if prompt_format_list has more than one entries
+        else, if the format is fixed, the only entry is fetched making it deterministic.
+
+        Args:
+        ----
+            phrase: The phrase to be used for the prompt.
+
+        Returns:
+        -------
+            The formatted prompt.
+        """
         prompt_format = random.choice(self.prompt_format_choices)
 
         prompt = prompt_format.format(phrase)
@@ -207,6 +293,18 @@ class PhraseCutDataset(Dataset):
         return {k: v[0] for k, v in text_inputs.items()}
 
     def get_neg_phrase(self, curr_phrase: str, curr_image_id: int) -> str | None:
+        """Get a new phrase that is not the current phrase and is not present in the dataset for the same image.
+        The corresponding mask for this phrase would be all zeros.
+
+        Args:
+        ----
+            curr_phrase: The corresponding phrase for the current task.
+            curr_image_id: The id of the image for the current task.
+
+        Returns:
+        -------
+            New phrase or None if no new phrase is sampled.
+        """
         # Use zero mask if neg_prob is greater than 1
         # Do not use mask if the neg_prob is less than 0
         if self.neg_prob >= 1 or (
@@ -228,6 +326,21 @@ class PhraseCutDataset(Dataset):
 
     @staticmethod
     def load_image(path: StrPath, flags: int = cv2.IMREAD_UNCHANGED) -> MatLike:
+        """Load an image from a path.
+
+        Args:
+        ----
+            path: The path to the image.
+            flags: The flags to be passed to `cv2.imread` function while loading.
+
+        Raises:
+        ------
+            ValueError: If image is not found in the path.
+
+        Returns:
+        -------
+            Image loaded from the path as a numpy-like array.
+        """
         img = cv2.imread(str(path), flags)
 
         if img is None:
@@ -243,6 +356,15 @@ class PhraseCutDataset(Dataset):
         mask: np.ndarray,
         figsize: tuple[int, int] = (15, 5),
     ) -> None:
+        """Plot an image with mask and cut of the image where the mask is.
+
+        Args:
+        ----
+            img: The image to be plotted.
+            phrase: The phrase corresponding to the mask.
+            mask: The mask to be plotted.
+            figsize: The figure size.
+        """
         _, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=figsize)
 
         ax1.imshow(PhraseCutDataset.img_normalize(img))
@@ -266,5 +388,17 @@ class PhraseCutDataset(Dataset):
         ax3.set_title("Image with Mask")
 
     @staticmethod
-    def img_normalize(img: np.ndarray) -> np.ndarray:
-        return (img - img.min()) / (img.max() - img.min())
+    def img_normalize(img: ImageLike) -> ImageLike:
+        """Normalize the image between 0 and 1 by dividing the image by its range.
+
+        Args:
+        ----
+            img: The image to be normalized.
+
+        Returns:
+        -------
+            The normalized image.
+        """
+        img_min: ImageLike = img.min()  # type: ignore
+        img_max: ImageLike = img.max()  # type: ignore
+        return (img - img_min) / (img_max - img_min)

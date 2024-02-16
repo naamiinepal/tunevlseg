@@ -27,32 +27,29 @@ import os
 from argparse import ArgumentParser
 from collections import defaultdict
 from pathlib import Path
-from typing import Optional, Union
 
 import cv2
 import numpy as np
 import pandas as pd
 import torch
-from monai.metrics import (
-    #  compute_hausdorff_distance,
-    compute_dice,
-    compute_iou,
-)
+from monai.metrics.meandice import compute_dice
+from monai.metrics.meaniou import compute_iou
 from tqdm import tqdm
 
 
+def load_image(image_path: str, flags: int = cv2.IMREAD_GRAYSCALE):
+    image = cv2.imread(image_path, flags)
+
+    if image is None:
+        msg = f"Image Not found: {image_path}"
+        raise ValueError(msg)
+
+    return image
+
+
 def compute_metrics(gt_img_path: str, pred_img_path: str, threshold: int):
-    gt_img = cv2.imread(gt_img_path, cv2.IMREAD_GRAYSCALE)
-
-    if gt_img is None:
-        msg = f"GT Image Not found: {gt_img_path}"
-        raise ValueError(msg)
-
-    pred_img = cv2.imread(pred_img_path, cv2.IMREAD_GRAYSCALE)
-
-    if pred_img is None:
-        msg = f"Pred Image Not Found: {pred_img_path}"
-        raise ValueError(msg)
+    gt_img = load_image(gt_img_path)
+    pred_img = load_image(pred_img_path)
 
     # make sure the images are of same size
     assert (
@@ -60,8 +57,8 @@ def compute_metrics(gt_img_path: str, pred_img_path: str, threshold: int):
     ), f"Images {gt_img_path} and {pred_img_path} are of different sizes"
 
     # threshold the images
-    gt_img = gt_img > 127
-    pred_img = pred_img > threshold
+    gt_img = gt_img > 127  # type: ignore
+    pred_img = pred_img > threshold  # type: ignore
 
     # change images to batch-first tensor [B,C,H,W]
     gt_img = torch.from_numpy(gt_img)[None, None, ...]
@@ -87,8 +84,8 @@ def compute_metrics(gt_img_path: str, pred_img_path: str, threshold: int):
 def main(
     seg_path: Path,
     gt_path: Path,
-    csv_path: Union[str, Path],
-    max_workers: Optional[int],
+    csv_path: str | Path,
+    max_workers: int | None,
     threshold: int,
 ) -> None:
     np.set_printoptions(precision=5)
@@ -151,9 +148,9 @@ def print_mean_std(df: pd.DataFrame, column_name: str) -> None:
     print(
         column_name.replace("_", " ").title(),
         "$",
-        column.mean().round(2),
+        round(column.mean()),
         r"\smallStd{",
-        column.std().round(2),
+        round(column.std()),
         "}$",
     )
 
