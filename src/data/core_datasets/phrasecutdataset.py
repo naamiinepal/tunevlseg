@@ -89,14 +89,15 @@ class PhraseCutDataset(Dataset):
 
     @staticmethod
     def get_prompt_list(prompt_method: PromptMethodType) -> tuple[str, ...]:
-        prompt_format_list = ["a photo of a {}."]
+        prompt_format_list = ["a photo of {}."]
 
         # For shuffle and shuffle+
         if prompt_method != "fixed":
             prompt_format_list.extend(
                 (
-                    "a photograph of a {}.",
-                    "an image of a {}.",
+                    "a photograph of {}.",
+                    "a picture of {}.",
+                    "an image of {}.",
                     "{}.",
                 ),
             )
@@ -104,11 +105,18 @@ class PhraseCutDataset(Dataset):
         if prompt_method == "shuffle+":
             prompt_format_list.extend(
                 (
-                    "a cropped photo of a {}.",
-                    "a good photo of a {}.",
-                    "a photo of one {}.",
-                    "a bad photo of a {}.",
-                    "a photo of the {}.",
+                    "a cropped photo of {}.",
+                    "a good photo of {}.",
+                    "a bad photo of {}.",
+                    "a cropped photograph of {}.",
+                    "a good photograph of {}.",
+                    "a bad photograph of {}.",
+                    "a cropped image of {}.",
+                    "a good image of {}.",
+                    "a bad image of {}.",
+                    "a cropped snap of {}.",
+                    "a good snap of {}.",
+                    "a bad snap of {}.",
                 ),
             )
 

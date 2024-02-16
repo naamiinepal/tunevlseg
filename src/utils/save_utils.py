@@ -77,7 +77,10 @@ def save_predictions(
             mask_names: Iterable[str] = p["mask_name"]
             mask_shapes: Iterable[Iterable[int]] = p["mask_shape"]
             for pred, mask_name, mask_shape in zip(
-                preds, mask_names, mask_shapes, strict=True
+                preds,
+                mask_names,
+                mask_shapes,
+                strict=True,
             ):
                 file_path: Path = output_masks_dir / mask_name
 

@@ -43,6 +43,8 @@ class TransDecoder(nn.Module):
         """
         super().__init__(*args, **kwargs)
 
+        self.decoder_layer_kwargs = decoder_layer_kwargs
+
         self.transformer_decoder = self.get_trans_decoder(
             image_hidden_size,
             decoder_layer_kwargs,
@@ -59,16 +61,25 @@ class TransDecoder(nn.Module):
 
     def forward(
         self,
-        skip_connection_tensor: torch.Tensor,
+        tgt: torch.Tensor,
+        memory_mask: torch.Tensor | None,
         *args,
         **kwargs,
     ) -> torch.Tensor:
-        # shape: (B, N_i + 1, H_i)
-        trans_output: torch.Tensor = self.transformer_decoder(*args, **kwargs)
+        if memory_mask is not None:
+            memory_mask = self.get_memory_mask(memory_mask, tgt.size(1))
 
-        # Add skip connection from CLIPVisionEncoder and remove the pooled output
+        # shape: (B, N_i + 1, H_i)
+        trans_output: torch.Tensor = self.transformer_decoder(
+            *args,
+            tgt=tgt,
+            memory_mask=memory_mask,
+            **kwargs,
+        )
+
+        # Remove the pooled output
         # shape: (B, N_i, H_i)
-        image_output = skip_connection_tensor[:, 1:, :] + trans_output[:, 1:, :]
+        image_output = trans_output[:, 1:, :]
 
         # Move the hidden dimension to make it channel first
         # shape: (B, H_i, N_i)
@@ -89,6 +100,18 @@ class TransDecoder(nn.Module):
         img_channel_first = channel_first_output.view(B, H, hid_img_size, hid_img_size)
 
         return self.upsampler(img_channel_first)
+
+    def get_memory_mask(self, memory_mask: torch.Tensor, N_i: int) -> torch.Tensor:
+        B, N_t = memory_mask.shape
+        n_head = self.decoder_layer_kwargs["nhead"]
+
+        # needed shape: (B * n_head, N_i, N_t)
+        return (
+            memory_mask.expand(n_head * N_i, B, N_t)
+            .moveaxis(1, 0)
+            .reshape(B * n_head, N_i, N_t)
+            .bool()
+        )
 
     @staticmethod
     def get_trans_decoder(

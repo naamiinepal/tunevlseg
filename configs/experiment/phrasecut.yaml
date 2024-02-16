@@ -36,17 +36,21 @@ model:
     freeze_text_encoder: true
     add_pos_enc: false
     decoder_layer_kwargs:
-      nhead: 8
+      nhead: 12
       dropout: 0.1
       norm_first: true
     num_decoder_layers: 4
     num_upsampler_layers: 5
     image_size: ${img_size}
   compile: false # Torch compile works only when CUDA Compat >= 7.0
+  loss_fn:
+    lambda_ce: 1
 
 data:
   batch_size: 64
   drop_last: true
+  train_ds:
+    neg_prob: 0.1
 
 logger:
   wandb:
@@ -69,7 +73,7 @@ text_pretrained_path: ${model_pretrained_path}
 exp_name: "img_${img_size}_b${data.batch_size}_lr${model.optimizer.lr}_p${trainer.precision}"
 output_masks_dir: "output_masks/phrasecut/${exp_name}"
 
-img_size: 224
+img_size: 352
 data_root: ${oc.env:PHRASECUT_ROOT}
 
 img_mean: [0.48145466, 0.4578275, 0.40821073]
@@ -81,11 +85,21 @@ train_transforms:
   transforms:
     - _target_: albumentations.SmallestMaxSize
       max_size: ${img_size}
+      interpolation: ${import_eval:cv2.INTER_CUBIC}
     - _target_: albumentations.Rotate
       limit: 10
+      interpolation: ${import_eval:cv2.INTER_CUBIC}
       border_mode: ${import_eval:cv2.BORDER_REPLICATE}
       p: 0.2
-    - _target_: albumentations.RandomCrop
+    - _target_: albumentations.RandomScale
+      scale_limit: 0.1
+      interpolation: ${import_eval:cv2.INTER_CUBIC}
+      p: 0.2
+    - _target_: albumentations.PadIfNeeded
+      min_height: ${img_size}
+      min_width: ${img_size}
+      border_mode: ${import_eval:cv2.BORDER_REPLICATE}
+    - _target_: albumentations.CropNonEmptyMaskIfExists
       width: ${img_size}
       height: ${img_size}
     - _target_: albumentations.RandomBrightnessContrast
@@ -105,6 +119,7 @@ _eval_transforms:
     - _target_: albumentations.Resize
       height: ${img_size}
       width: ${img_size}
+      interpolation: ${import_eval:cv2.INTER_CUBIC}
     - _target_: albumentations.Normalize
       mean: ${img_mean}
       std: ${img_std}

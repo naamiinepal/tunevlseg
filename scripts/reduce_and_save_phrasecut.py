@@ -95,7 +95,7 @@ def main(
     task_output_dir: StrPath,
     max_workers: int | None,
     verbose: bool,
-):
+) -> None:
     image_root = Path(image_root)
 
     if not image_root.is_dir():

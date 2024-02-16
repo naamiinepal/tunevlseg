@@ -178,7 +178,10 @@ class ImageTextMaskModule(LightningModule):
             data = [
                 [img, inp_id, label]
                 for img, inp_id, label in zip(
-                    plot_images, plot_input_ids, plot_label, strict=True
+                    plot_images,
+                    plot_input_ids,
+                    plot_label,
+                    strict=True,
                 )
             ]
 

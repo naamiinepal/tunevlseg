@@ -1,11 +1,10 @@
-"""
-Script to evaluate the segmentation metrics.
+"""Script to evaluate the segmentation metrics.
 The script takes in the path to the segmentation and ground truth images and
 computes the following metrics:
 1. Surface Dice
 2. Hausdorff Distance
 3. IoU
-4. Dice
+4. Dice.
 
 NOTE: The script assumes that the segmentation and ground truth images
 have the same name. The script also assumes that the images are binary
@@ -24,9 +23,9 @@ Usage:
 
 
 import concurrent.futures
+import os
 from argparse import ArgumentParser
 from collections import defaultdict
-import os
 from pathlib import Path
 from typing import Optional, Union
 
@@ -46,12 +45,14 @@ def compute_metrics(gt_img_path: str, pred_img_path: str, threshold: int):
     gt_img = cv2.imread(gt_img_path, cv2.IMREAD_GRAYSCALE)
 
     if gt_img is None:
-        raise ValueError(f"GT Image Not found: {gt_img_path}")
+        msg = f"GT Image Not found: {gt_img_path}"
+        raise ValueError(msg)
 
     pred_img = cv2.imread(pred_img_path, cv2.IMREAD_GRAYSCALE)
 
     if pred_img is None:
-        raise ValueError(f"Pred Image Not Found: {pred_img_path}")
+        msg = f"Pred Image Not Found: {pred_img_path}"
+        raise ValueError(msg)
 
     # make sure the images are of same size
     assert (
@@ -89,7 +90,7 @@ def main(
     csv_path: Union[str, Path],
     max_workers: Optional[int],
     threshold: int,
-):
+) -> None:
     np.set_printoptions(precision=5)
 
     cpu_count = os.cpu_count() or 1
@@ -128,7 +129,7 @@ def main(
                     {
                         "Mean Dice": np.mean(aggregator["dice"]),
                         "Mean IoU": np.mean(aggregator["iou"]),
-                    }
+                    },
                 )
 
     df = pd.DataFrame(aggregator)
@@ -139,19 +140,19 @@ def main(
             print_mean_std(df, key)
 
     # sort the dataframe by filename to make output consistent
-    df.sort_values(by="filename", inplace=True)
+    df = df.sort_values(by="filename")
 
     df.to_csv(csv_path, index=False, float_format="%.4f")
     print(f"Saved metrics to {csv_path}")
 
 
-def print_mean_std(df: pd.DataFrame, column_name: str):
+def print_mean_std(df: pd.DataFrame, column_name: str) -> None:
     column = df[column_name]
     print(
         column_name.replace("_", " ").title(),
         "$",
         column.mean().round(2),
-        "\smallStd{",
+        r"\smallStd{",
         column.std().round(2),
         "}$",
     )
@@ -173,7 +174,10 @@ if __name__ == "__main__":
         help="path to ground truth files",
     )
     parser.add_argument(
-        "--csv-path", type=str, default="metrics.csv", help="path to save csv file"
+        "--csv-path",
+        type=str,
+        default="metrics.csv",
+        help="path to save csv file",
     )
     parser.add_argument(
         "--max-workers",

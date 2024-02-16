@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import warnings
-from collections.abc import Callable
 from importlib.util import find_spec
 from typing import TYPE_CHECKING, Any, TypeVar
 
@@ -10,7 +9,7 @@ from src.utils import pylogger, rich_utils
 log = pylogger.RankedLogger(__name__, rank_zero_only=True)
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Callable, Mapping
 
     from omegaconf import DictConfig
 
@@ -18,6 +17,7 @@ if TYPE_CHECKING:
 
     FReturnType = tuple[DictStr2Any, DictStr2Any]
     TaskWrapperFunc = TypeVar("TaskWrapperFunc", bound=Callable[..., FReturnType])
+
 
 def extras(cfg: DictConfig) -> None:
     """Applies optional utilities before the task is started.

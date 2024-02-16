@@ -1,9 +1,8 @@
 from pathlib import Path
-from PIL import Image
+
 import numpy as np
-
+from PIL import Image
 from tqdm import tqdm
-
 
 DATA_ROOT = "/mnt/SSD1/rabin/datasets/phrasecut/images"
 

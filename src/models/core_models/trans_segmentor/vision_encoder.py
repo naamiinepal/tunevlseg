@@ -23,7 +23,6 @@ class TransVisionEncoder(nn.Module):
 
         self.model: CLIPVisionModel = CLIPVisionModel.from_pretrained(
             pretrained_model_or_path,
-            output_hidden_states=True,
         )  # type:ignore
 
         self.config = self.model.config  # type:ignore

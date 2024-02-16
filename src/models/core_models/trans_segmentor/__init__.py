@@ -96,18 +96,15 @@ class TransformerSegmentor(nn.Module):
         # shape: (B, N_i, H_i)
         image_last_hidden_state = image_output_obj.last_hidden_state
 
-        # shape: (B, N_i, H_i)
-        image_first_hidden_state = image_output_obj.hidden_states[0]
-
         # Apply positional encoding, if needed
         text_with_pos_enc = self.add_pos_enc_or_identity(text_proj_output)
         image_with_pos_enc = self.add_pos_enc_or_identity(image_last_hidden_state)
 
         # shape: (B, num_output_channels, H, W)
         return self.decoder(
-            skip_connection_tensor=image_first_hidden_state,
             tgt=image_with_pos_enc,
             memory=text_with_pos_enc,
+            memory_mask=text_input.get("attention_mask"),
         )
 
     @staticmethod

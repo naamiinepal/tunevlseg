@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader, Dataset
 

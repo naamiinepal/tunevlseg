@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import functools
-from ast import literal_eval
 from collections.abc import Callable
 from importlib import import_module
 from typing import TypeVar
@@ -61,7 +60,7 @@ def register_new_resolvers(func: ResolverFuncType) -> ResolverFuncType:
     @functools.wraps(func)
     def inner_func(*args, **kwargs):
         # Register a resolver to evaluate in the yaml file
-        OmegaConf.register_new_resolver("literal_eval", literal_eval)
+        OmegaConf.register_new_resolver("literal_eval", eval)
 
         # Register a resolver to import a function in the yaml file and evaluate it
         # It can be done only for those dtypes which are serializable
