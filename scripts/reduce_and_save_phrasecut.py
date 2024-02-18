@@ -1,4 +1,3 @@
-# pyright: reportGeneralTypeIssues=false
 from __future__ import annotations
 
 import concurrent.futures
