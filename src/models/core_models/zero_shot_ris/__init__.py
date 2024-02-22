@@ -2,23 +2,52 @@ import torch
 from torch import nn
 from torchvision.transforms import functional as TF
 
-from .clip import CustomCLIP
+from .custom_openclip import CustomOpenCLIP
 from .freesolo import CustomFreeSOLO
+from .hfclip import CustomHFCLIP
 
 
 class ZeroShotRIS(nn.Module):
     alpha = 0.95
     beta = 0.5
 
-    def __init__(self, clip_pretrained_path, solo_config, solo_state_dict_path) -> None:
+    def __init__(
+        self,
+        clip_pretrained_path,
+        is_hf_model,
+        solo_config,
+        solo_state_dict_path,
+        clip_interpolation_mode=TF.InterpolationMode.BICUBIC,
+    ) -> None:
         super().__init__()
 
-        self.clip = CustomCLIP(clip_pretrained_path)
+        self.clip = (
+            CustomHFCLIP(clip_pretrained_path)
+            if is_hf_model
+            else CustomOpenCLIP(clip_pretrained_path)
+        )
         self.freesolo = CustomFreeSOLO(solo_config, solo_state_dict_path)
-        self.vision_config = self.clip.config.vision_config
+
+        self.clip_interpolation_mode = self.get_torchvision_interpolation_mode(
+            clip_interpolation_mode,
+        )
+
+    @staticmethod
+    def get_torchvision_interpolation_mode(mode):
+        if isinstance(mode, TF.InterpolationMode):
+            return mode
+
+        if isinstance(mode, str):
+            return TF.InterpolationMode(mode)
+
+        if isinstance(mode, int):
+            return TF._interpolation_modes_from_int(mode)
+
+        msg = f"Unsupported interpolation mode: {mode}"
+        raise ValueError(msg)
 
     def get_cropped_features(self, image_input: torch.Tensor, pred_boxes, pred_masks):
-        clip_image_size = self.vision_config.image_size
+        clip_image_size = self.clip.image_size
 
         pixel_mean = torch.tensor([0.485, 0.456, 0.406]).reshape(3, 1, 1)
 
@@ -43,6 +72,7 @@ class ZeroShotRIS(nn.Module):
                 (x2 - x1),
                 [clip_image_size, clip_image_size],
                 antialias=False,
+                interpolation=self.clip_interpolation_mode,
             )
 
             cropped_imgs.append(masked_image)
@@ -52,7 +82,7 @@ class ZeroShotRIS(nn.Module):
         return self.clip.get_image_features(cropped_tensor)
 
     def get_text_ensemble(self, text_input: dict[str, torch.Tensor]):
-        batched_text_features = self.clip.model.get_text_features(
+        batched_text_features = self.clip.get_text_features(
             text_input["input_ids"],
             text_input["attention_mask"],
         )
@@ -72,15 +102,16 @@ class ZeroShotRIS(nn.Module):
         return logits_per_image.argmax()
 
     def get_mask_features(self, image_input: torch.Tensor, pred_masks):
-        clip_image_size = self.vision_config.image_size
+        clip_image_size = self.clip.image_size
 
         resized_image = TF.resize(
             image_input,
             [clip_image_size, clip_image_size],
             antialias=False,
+            interpolation=self.clip_interpolation_mode,
         )
 
-        patch_size = self.vision_config.patch_size
+        patch_size = self.clip.patch_size
         mask_size = clip_image_size // patch_size
 
         # Add channel dimension to the pred_masks
@@ -98,8 +129,6 @@ class ZeroShotRIS(nn.Module):
         )
 
     def get_visual_feature(self, image_input: torch.Tensor, pred_boxes, pred_masks):
-        print("Prediction Mask Shape:", pred_masks.shape)
-
         mask_features = self.get_mask_features(image_input, pred_masks)
 
         crop_features = self.get_cropped_features(image_input, pred_boxes, pred_masks)

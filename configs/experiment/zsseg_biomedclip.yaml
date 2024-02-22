@@ -53,8 +53,9 @@ logger:
 # Additional parameters    #
 ############################
 
-model_pretrained_path: openai/clip-vit-base-patch32
-tokenizer_pretrained_path: ${model_pretrained_path}
+model_pretrained_path: hf-hub:microsoft/BiomedCLIP-PubMedBERT_256-vit_base_patch16_224
+is_hf_model: false
+tokenizer_pretrained_path: microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract
 
 exp_name: "img_${img_size}_b${data.batch_size}_lr${model.optimizer.lr}_p${trainer.precision}"
 

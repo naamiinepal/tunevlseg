@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 
 from torch import nn
 
-from src.models.core_models.detectron2.layers import ShapeSpec
+from ...layers import ShapeSpec
 
 
 class Backbone(nn.Module, ABC):

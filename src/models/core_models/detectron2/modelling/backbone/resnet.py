@@ -5,7 +5,7 @@ from fvcore.nn import weight_init
 from torch import nn
 from torch.nn import functional as F
 
-from detectron2.layers import (
+from ...layers import (
     CNNBlockBase,
     Conv2d,
     DeformConv,
@@ -13,7 +13,6 @@ from detectron2.layers import (
     ShapeSpec,
     get_norm,
 )
-
 from .backbone import Backbone
 
 __all__ = [

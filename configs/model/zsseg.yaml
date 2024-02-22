@@ -3,6 +3,7 @@ _target_: src.models.image_text_mask_module.ImageTextMaskModule
 net:
   _target_: src.models.core_models.zero_shot_ris.ZeroShotRIS
   clip_pretrained_path: ${model_pretrained_path}
+  is_hf_model: ${is_hf_model}
   solo_state_dict_path: ${paths.pretrain_dir}/FreeSOLO_R101_30k.pt
   solo_config:
     CUDNN_BENCHMARK: False

@@ -1,0 +1,79 @@
+# @package _global_
+
+# to execute this experiment run:
+# python train.py experiment=example
+
+defaults:
+  - override /data: zsseg
+  - override /model: zsseg
+  - override /callbacks: default
+  - override /trainer: default
+  - override /logger: wandb
+  - override /extras: default
+
+# all parameters below will be merged with parameters from default configurations set above
+# this allows you to overwrite only specified parameters
+
+tags: ["zero_shot_ris"]
+
+seed: 12345
+
+trainer:
+  min_epochs: 10
+  max_epochs: 1000
+  gradient_clip_val: null
+  accelerator: auto
+  devices: [1]
+  precision: 16-mixed
+  val_check_interval: 0.5
+
+model:
+  weight_decay: 0.0
+  optimizer:
+    lr: 2.0e-5
+  compile: false # Torch compile works only when CUDA Compat >= 7.0
+  loss_fn:
+    lambda_ce: 1
+
+data:
+  drop_last: false
+  pin_memory: false
+  num_workers: 2
+
+logger:
+  wandb:
+    project: Zero Shot Segmentation
+    name: ${exp_name}
+    tags: ${tags}
+    group: "medical"
+  aim:
+    experiment: "medical"
+
+############################
+# Additional parameters    #
+############################
+
+model_pretrained_path: openai/clip-vit-base-patch32
+is_hf_model: true
+tokenizer_pretrained_path: ${model_pretrained_path}
+
+exp_name: "img_${img_size}_b${data.batch_size}_lr${model.optimizer.lr}_p${trainer.precision}"
+
+img_mean: [0.48145466, 0.4578275, 0.40821073]
+img_std: [0.26862954, 0.26130258, 0.27577711]
+
+prompt_type: p6
+
+# Image pre-processing configs
+
+_eval_transforms:
+  _target_: albumentations.Compose
+  transforms:
+    - _target_: albumentations.Normalize
+      mean: ${img_mean}
+      std: ${img_std}
+    - _target_: albumentations.pytorch.ToTensorV2
+      transpose_mask: true
+
+val_transforms: ${_eval_transforms}
+test_transforms: ${_eval_transforms}

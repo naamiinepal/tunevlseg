@@ -11,13 +11,16 @@ from .utils import (
 )
 
 
-class CustomCLIP(nn.Module):
+class CustomHFCLIP(nn.Module):
     def __init__(self, clip_pretrained_path) -> None:
         super().__init__()
 
         self.model: CLIPModel = CLIPModel.from_pretrained(clip_pretrained_path)  # type:ignore
 
-        self.config = self.model.config
+        vision_config = self.model.config.vision_config  # type:ignore
+
+        self.image_size: int = vision_config.image_size
+        self.patch_size: int = vision_config.patch_size
 
     def get_vision_encoder_output(
         self,
@@ -46,13 +49,6 @@ class CustomCLIP(nn.Module):
             return_dict if return_dict is not None else model.config.use_return_dict
         )
 
-        patch_len = inputs_embeds.size(1) - 1
-        size = math.isqrt(patch_len)
-
-        if size * size != patch_len:
-            msg = "The number of patches in the image must be a perfect square."
-            raise ValueError(msg)
-
         encoder_states = ()
         all_attentions = ()
 
@@ -76,6 +72,13 @@ class CustomCLIP(nn.Module):
                 )
 
         else:
+            patch_len = inputs_embeds.size(1) - 1
+            size = math.isqrt(patch_len)
+
+            if size * size != patch_len:
+                msg = "The number of patches in the image must be a perfect square."
+                raise ValueError(msg)
+
             non_masked_blocks: nn.ModuleList = model.layers[:masking_block_idx]  # type:ignore
             masked_blocks: nn.ModuleList = model.layers[masking_block_idx:]  # type:ignore
 
@@ -233,3 +236,6 @@ class CustomCLIP(nn.Module):
         pooled_output = vision_outputs[1]  # pooled_output
 
         return model.visual_projection(pooled_output)
+
+    def get_text_features(self, *args, **kwargs) -> torch.FloatTensor:
+        return self.model.get_text_features(*args, **kwargs)

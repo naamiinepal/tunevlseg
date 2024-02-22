@@ -6,8 +6,7 @@ from fvcore.nn import weight_init
 from torch import nn
 from torch.nn import functional as F
 
-from detectron2.layers import Conv2d, ShapeSpec, get_norm
-
+from ...layers import Conv2d, ShapeSpec, get_norm
 from .backbone import Backbone
 from .resnet import build_resnet_backbone
 
