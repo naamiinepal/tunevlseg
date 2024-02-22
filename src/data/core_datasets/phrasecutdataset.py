@@ -57,8 +57,9 @@ class PhraseCutDataset(BaseDataset):
         Returns:
         -------
             The filtered tasks.
+
         """
-        with open(json_path) as f:
+        with open(json_path, encoding="locale") as f:
             tasks: list[dict[str, Any]] = json.load(f)
 
         if not filter_tasks:
@@ -120,6 +121,7 @@ class PhraseCutDataset(BaseDataset):
         Returns:
         -------
             Image id.
+
         """
         img_id, _ = task_id.split("__", 1)
         return int(img_id)
@@ -134,7 +136,7 @@ class PhraseCutDataset(BaseDataset):
         return image_id, image_path
 
     @staticmethod
-    def get_mask_name(task: JSONMapping):
+    def get_mask_name(task: JSONMapping) -> str:
         phrase: str = task["phrase"]
         safe_phrase = phrase.replace("/", "\\")
 

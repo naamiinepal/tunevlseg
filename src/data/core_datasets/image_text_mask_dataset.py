@@ -40,7 +40,7 @@ class ImageTextDataset(Dataset):
 
         self.prompt_map_index = f"p{prompt_index}"
 
-        with open(task_path) as fp:
+        with open(task_path, encoding="locale") as fp:
             self.tasks: list[Mapping[str, str | PromptMappingType]] = json.load(
                 fp,
             )

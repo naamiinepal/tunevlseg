@@ -259,7 +259,7 @@ class ImageTextMaskModule(LightningModule):
         text_input = {k: batch[k] for k in ("input_ids", "attention_mask")}
         img = batch["image"]
 
-        return self.forward(image_input=img, text_input=text_input)
+        return self(image_input=img, text_input=text_input)
 
     def setup(self, stage: str | None) -> None:
         """Lightning hook that is called at the beginning of fit (train + validate), validate,

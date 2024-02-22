@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import random
-from abc import ABCMeta, abstractmethod
+from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, TypeVar
 
@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     ImageLike = TypeVar("ImageLike", np.ndarray, torch.Tensor)
 
 
-class BaseDataset(Dataset, metaclass=ABCMeta):
+class BaseDataset(Dataset, ABC):
     def __init__(
         self,
         task_json_path: StrPath,
@@ -70,10 +70,11 @@ class BaseDataset(Dataset, metaclass=ABCMeta):
 
         self.prompt_format_choices = self.get_prompt_list(prompt_method)
 
-    @abstractmethod
     @staticmethod
+    @abstractmethod
     def load_tasks(
-        json_path: StrPath, filter_tasks: bool
+        json_path: StrPath,
+        filter_tasks: bool,
     ) -> tuple[dict[str, Any], ...]:
         """Load tasks from a json file and filter out tasks that have phrase length less than 2.
         Also, exclude images with ids in invalid_img_ids (copied from clipseg).
@@ -86,20 +87,23 @@ class BaseDataset(Dataset, metaclass=ABCMeta):
         Returns:
         -------
             The filtered tasks.
+
         """
         ...
 
-    @abstractmethod
     @staticmethod
+    @abstractmethod
     def get_phrase2image_ids(tasks: Iterable[JSONMapping]) -> Str2SetInt:
         """Get a mapping of phrase to a set of image ids.
 
         Args:
+        ----
             tasks: The tasks to get the mapping from.
 
-        Returns
+        Returns:
         -------
             A mapping of phrase to a set of image ids.
+
         """
         ...
 
@@ -114,6 +118,7 @@ class BaseDataset(Dataset, metaclass=ABCMeta):
         Returns:
         -------
             The list of prompt formats.
+
         """
         prompt_format_list = ["a photo of {}."]
 
@@ -151,16 +156,19 @@ class BaseDataset(Dataset, metaclass=ABCMeta):
     def __len__(self) -> int:
         return len(self.tasks)
 
-    @abstractmethod
     @staticmethod
+    @abstractmethod
     def get_mask_name(task: JSONMapping) -> str:
         """Get mask name from task.
 
         Args:
+        ----
             task: The task to extract mask name from.
 
         Returns:
+        -------
             The mask name.
+
         """
         ...
 
@@ -169,10 +177,13 @@ class BaseDataset(Dataset, metaclass=ABCMeta):
         """Get image id and image path from task.
 
         Args:
+        ----
             task: The task to extract image id and image path from.
 
         Returns:
+        -------
             The image id and image path.
+
         """
         ...
 
@@ -243,6 +254,7 @@ class BaseDataset(Dataset, metaclass=ABCMeta):
         Returns:
         -------
             The formatted prompt.
+
         """
         prompt_format = random.choice(self.prompt_format_choices)
 
@@ -274,6 +286,7 @@ class BaseDataset(Dataset, metaclass=ABCMeta):
         Returns:
         -------
             New phrase or None if no new phrase is sampled.
+
         """
         # Use zero mask if neg_prob is greater than 1
         # Do not use mask if the neg_prob is less than 0
@@ -310,6 +323,7 @@ class BaseDataset(Dataset, metaclass=ABCMeta):
         Returns:
         -------
             Image loaded from the path as a numpy-like array.
+
         """
         img = cv2.imread(str(path), flags)
 
@@ -334,6 +348,7 @@ class BaseDataset(Dataset, metaclass=ABCMeta):
             phrase: The phrase corresponding to the mask.
             mask: The mask to be plotted.
             figsize: The figure size.
+
         """
         _, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=figsize)
 
@@ -368,6 +383,7 @@ class BaseDataset(Dataset, metaclass=ABCMeta):
         Returns:
         -------
             The normalized image.
+
         """
         img_min: ImageLike = img.min()  # type: ignore
         img_max: ImageLike = img.max()  # type: ignore

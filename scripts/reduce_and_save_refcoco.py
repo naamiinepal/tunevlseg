@@ -38,6 +38,7 @@ def read_image(image_path: str):
     Returns:
     -------
         The image in `MatLike` format.
+
     """
     # Need to load image from cv2 to get the shape.
     # Maybe change to PIL for efficiency
@@ -64,6 +65,7 @@ def get_mask_from_polygons(
     Returns:
     -------
         The mask in `np.ndarray` format.
+
     """
     # Create an empty mask for the polygon
     # Its type can be either float32 or uint8
@@ -87,6 +89,7 @@ def get_output_name(image_id: object, ann_id: object, sent_id: object) -> str:
     Returns:
     -------
         The output path for the mask.
+
     """
     return f"{image_id}-{ann_id}-{sent_id}.png"
 
@@ -111,6 +114,7 @@ def write_mask(
     Raises:
     ------
         RuntimeError: If the mask cannot be saved to disk.
+
     """
     if skip_mask_if_exists and output_path.exists():
         if verbose:
@@ -153,6 +157,7 @@ def process_task(
     Returns:
     -------
         The output path for the mask.
+
     """
     image_name: str = task["image_name"]
 
@@ -194,6 +199,7 @@ def save_filtered_tasks(tasks: Iterable[Mapping], task_output_path: Path) -> boo
     Returns:
     -------
         Status of whether the tasks were saved successfully.
+
     """
     if task_output_path.exists():
         ip = input(
@@ -224,11 +230,12 @@ def filter_refs(refs: Iterable[RefT], split: object) -> tuple[RefT, ...]:
     Returns:
     -------
         Filtered refs.
+
     """
     if split == "test":
         # Return both testA and testB
         return tuple(ref for ref in refs if ref["split"].startswith("test"))
-    if split in ("train", "val", "testA", "testB"):
+    if split in {"train", "val", "testA", "testB"}:
         return tuple(ref for ref in refs if ref["split"] == split)
     return tuple(refs)
 
@@ -243,6 +250,7 @@ def get_image_id2image_name(image_metadata: Iterable[Mapping[str, Any]]):
     Returns:
     -------
         The mapping from image_id to image_name.
+
     """
     image_id2image_name: dict[int, str] = {}
     for img_meta in image_metadata:
@@ -262,6 +270,7 @@ def get_ann_id2polygons(annotations: Iterable[Mapping[str, Any]]):
     Returns:
     -------
         Mapping from ann_id to the polygons.
+
     """
     ann_id2polygons: dict[int, PolygonType] = {}
     for ann in annotations:
@@ -282,6 +291,7 @@ def get_refs(ref_file_path: StrPath, split: object):
     Returns:
     -------
         The refs filtered on the split.
+
     """
     with open(ref_file_path, "rb") as f:
         refs: list[dict[str, Any]] = pickle.load(f)
@@ -308,8 +318,9 @@ def get_instances(instances_json_path: StrPath):
     Returns:
     -------
         The instances extracted from the json file.
+
     """
-    with open(instances_json_path) as f:
+    with open(instances_json_path, encoding="locale") as f:
         instances: dict[str, Any] = json.load(f)
 
     if not instances_json_path:
@@ -331,6 +342,7 @@ def get_tasks(instances_json_path: StrPath, ref_file_path: StrPath, split: objec
     -------
         The tasks containing image_id, ann_id, sent_id, phrase, and polygons.
         Returns None if there are no tasks.
+
     """
     refs = get_refs(ref_file_path, split)
 
@@ -384,6 +396,7 @@ def get_dataset(ref_file_path: Path):
     Returns:
     -------
         The dataset extracted from the ref file stem.
+
     """
     ref_file_stem = ref_file_path.stem[:-1]
     splitted = ref_file_stem.split("(", 1)
@@ -410,6 +423,7 @@ def get_unique_masks(
     Returns:
     -------
         The unique mask paths.
+
     """
     unique_mask_paths: set[str] = set()
     for future in concurrent.futures.as_completed(futures_to_task):
@@ -436,6 +450,7 @@ def get_created_dir(output_dir: StrPath):
     Returns:
     -------
         The created directory.
+
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -460,6 +475,7 @@ def print_preamble(
         ref_file_path: The file path to the ref file.
         split: The split to filter on.
         task_output_dir: The output directory for the tasks.
+
     """
     print("\nRef File Path:", ref_file_path)
     print("Split:", split)

@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 class RefCOCODataset(BaseDataset):
     @staticmethod
     def load_tasks(json_path: StrPath, filter_tasks: bool):
-        with open(json_path) as f:
+        with open(json_path, encoding="locale") as f:
             tasks = json.load(f)
 
         if filter_tasks:
@@ -53,7 +53,7 @@ class RefCOCODataset(BaseDataset):
         return image_id, image_path
 
     @staticmethod
-    def get_mask_name(task: JSONMapping):
+    def get_mask_name(task: JSONMapping) -> str:
         image_id = task["image_id"]
         ann_id = task["ann_id"]
         sent_id = task["sent_id"]
