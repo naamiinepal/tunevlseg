@@ -1,0 +1,27 @@
+_target_: src.data.image_text_mask_datamodule.ImageTextDatamodule
+val_ds:
+  _target_: src.data.core_datasets.zeroshot_dataset.ZeroshotDataset
+  images_dir: ${data_root}/kvasir_polyp/images
+  masks_dir: ${data_root}/kvasir_polyp/masks
+  caps_file: ${data_root}/kvasir_polyp/anns/val.json
+  tokenizer_pretrained_path: ${tokenizer_pretrained_path}
+  prompt_type: ${prompt_type}
+  object_class: polyp
+  transforms: ${val_transforms}
+  return_tensors: pt
+
+test_ds:
+  _target_: src.data.core_datasets.zeroshot_dataset.ZeroshotDataset
+  images_dir: ${data_root}/kvasir_polyp/images
+  masks_dir: ${data_root}/kvasir_polyp/masks
+  caps_file: ${data_root}/kvasir_polyp/anns/test.json
+  tokenizer_pretrained_path: ${tokenizer_pretrained_path}
+  prompt_type: ${prompt_type}
+  object_class: polyp
+  transforms: ${test_transforms}
+  return_tensors: pt
+
+batch_size: 1
+num_workers: 2
+drop_last: false
+pin_memory: true

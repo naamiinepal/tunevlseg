@@ -87,7 +87,9 @@ class TransformerSegmentor(nn.Module):
         )
 
     def forward(
-        self, text_input: Mapping[str, torch.Tensor], image_input: torch.Tensor
+        self,
+        text_input: Mapping[str, torch.Tensor],
+        image_input: torch.Tensor,
     ) -> torch.Tensor:
         # shape: (B, N_t, H_i)
         text_proj_output = self.text_encoder(**text_input)
