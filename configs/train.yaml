@@ -42,10 +42,11 @@ train: true
 # lightning chooses best weights based on the metric specified in checkpoint callback
 test: true
 
-
 # predict on test set, using best model weights achieved during training
 # lightning chooses best weights based on the metric specified in checkpoint callback
 predict: true
+
+output_masks_dir: ${paths.output_dir}/output_masks
 
 # simply provide checkpoint path to resume training
 ckpt_path: null
