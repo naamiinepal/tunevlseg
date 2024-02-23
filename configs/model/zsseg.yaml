@@ -260,7 +260,6 @@ net:
 
 loss_fn:
   _target_: monai.losses.DiceCELoss
-  sigmoid: true
   lambda_ce: 0.25
 
 weight_decay: 0.0
@@ -283,3 +282,4 @@ compile: false
 
 task: binary
 threshold: 0.5
+activation_fn: null

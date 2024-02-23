@@ -4,6 +4,7 @@ defaults:
   - _self_
   - data: mnist # choose datamodule with `test_dataloader()` for evaluation
   - model: mnist
+  - callbacks: null
   - logger: null
   - trainer: default
   - paths: default
@@ -12,7 +13,7 @@ defaults:
 
   # experiment configs allow for version control of specific hyperparameters
   # e.g. best hyperparameters for given model and datamodule
-  - experiment: null
+  - experiment: ??
 
 task_name: "eval"
 
@@ -26,5 +27,11 @@ predict: true
 
 # passing checkpoint path is necessary for evaluation
 ckpt_path: ???
+
+# Disable empty ckpt check
+disable_ckpt: false
+
+# Default path for all of the datasets
+data_root: ${paths.data_dir}
 
 output_masks_dir: ${paths.output_dir}/output_masks

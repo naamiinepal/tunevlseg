@@ -81,6 +81,8 @@ class ZeroShotDataset(Dataset):
         # Convert BGR to RGB
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
+        mask_shape = image.shape[:-1]
+
         mask_name = cap["mask_name"]
         mask = self.load_image(self.masks_dir / mask_name, cv2.IMREAD_GRAYSCALE)
 
@@ -93,8 +95,6 @@ class ZeroShotDataset(Dataset):
             mask = transformed["mask"]
 
         text_inputs = self.get_text_output(cap["prompts"])
-
-        mask_shape = image.shape[:-1]
 
         # Metadata are needed to save the image for the predict step
         return {

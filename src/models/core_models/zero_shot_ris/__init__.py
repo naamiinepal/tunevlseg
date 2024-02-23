@@ -49,7 +49,11 @@ class ZeroShotRIS(nn.Module):
     def get_cropped_features(self, image_input: torch.Tensor, pred_boxes, pred_masks):
         clip_image_size = self.clip.image_size
 
-        pixel_mean = torch.tensor([0.485, 0.456, 0.406]).reshape(3, 1, 1)
+        pixel_mean = torch.tensor(
+            [0.485, 0.456, 0.406],
+            device=image_input.device,
+            dtype=image_input.dtype,
+        ).reshape(3, 1, 1)
 
         cropped_imgs = []
 
@@ -83,8 +87,8 @@ class ZeroShotRIS(nn.Module):
 
     def get_text_ensemble(self, text_input: dict[str, torch.Tensor]):
         batched_text_features = self.clip.get_text_features(
-            text_input["input_ids"],
-            text_input["attention_mask"],
+            text_input["input_ids"][0],
+            text_input["attention_mask"][0],
         )
 
         phrase_features, class_features = batched_text_features
@@ -166,4 +170,6 @@ class ZeroShotRIS(nn.Module):
 
         max_index = self.get_max_index(text_ensemble, visual_feature)
 
-        return pred_masks[max_index].unsqueeze(0)
+        selected_mask: torch.Tensor = pred_masks[max_index]
+
+        return selected_mask[None, None, ...].float()

@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+import hydra
+import rootutils
+
 if TYPE_CHECKING:
     from omegaconf import DictConfig
     from pytorch_lightning import LightningDataModule, LightningModule, Trainer
@@ -9,8 +12,6 @@ if TYPE_CHECKING:
 
     Dict2Any = dict[str, Any]
 
-import hydra
-import rootutils
 
 rootutils.setup_root(__file__, indicator=".project-root", pythonpath=True)
 # ------------------------------------------------------------------------------------ #
@@ -105,7 +106,7 @@ def main(cfg: DictConfig) -> None:
 
     :param cfg: DictConfig configuration composed by Hydra.
     """
-    if not cfg.ckpt_path:
+    if not cfg.ckpt_path and not cfg.disable_ckpt:
         msg = "`ckpt_path` must be provided to evaluate model."
         raise ValueError(msg)
 

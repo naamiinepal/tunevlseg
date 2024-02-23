@@ -102,5 +102,4 @@ class CustomOpenCLIP(nn.Module):
         input_ids: torch.Tensor,
         attention_mask: Any = None,
     ) -> torch.Tensor:
-        print(input_ids, input_ids.shape)
         return self.model.text(input_ids)

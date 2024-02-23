@@ -12,7 +12,7 @@ from torchvision.transforms import functional as TF
 from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Callable, Mapping
     from pathlib import Path
 
     from pytorch_lightning.loggers import WandbLogger
@@ -39,6 +39,7 @@ class ImageTextMaskModule(LightningModule):
         weight_decay: float = 0.0,
         log_image_num: int = 8,
         lr_scheduler_config: MappingStr2Any | None = None,
+        activation_fn: Callable[[torch.Tensor], torch.Tensor] | None = torch.sigmoid,
         *args,
         **kwargs,
     ) -> None:
@@ -73,6 +74,8 @@ class ImageTextMaskModule(LightningModule):
         self.val_iou = JaccardIndex(task=task, threshold=threshold)
         self.test_iou = JaccardIndex(task=task, threshold=threshold)
 
+        self.activation_fn = nn.Identity() if activation_fn is None else activation_fn
+
         self.logger: WandbLogger | None
 
     def forward(self, *args, **kwargs) -> torch.Tensor:
@@ -97,7 +100,7 @@ class ImageTextMaskModule(LightningModule):
         mask = batch["mask"]
         loss = self.loss_fn(logits, mask)
 
-        preds = torch.sigmoid(logits)
+        preds = self.activation_fn(logits)
 
         return loss, preds, mask.long()
 
@@ -245,7 +248,7 @@ class ImageTextMaskModule(LightningModule):
     def predict_step(self, batch: MappingStr2Any) -> DictStr2Any:
         logits = self.get_logits(batch)
 
-        preds = torch.sigmoid(logits)
+        preds = self.activation_fn(logits)
 
         # Mask name and shape is needed to save the predictions
         # in their original size

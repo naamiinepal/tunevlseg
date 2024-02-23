@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from lightning_utilities.core.rank_zero import rank_prefixed_message, rank_zero_only
+from pytorch_lightning.utilities.rank_zero import rank_prefixed_message, rank_zero_only
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
