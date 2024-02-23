@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import torch
 from torch import nn
 from torchvision.transforms import functional as TF
@@ -6,6 +10,13 @@ from .custom_openclip import CustomOpenCLIP
 from .freesolo import CustomFreeSOLO
 from .hfclip import CustomHFCLIP
 
+if TYPE_CHECKING:
+    from torch.serialization import FILE_LIKE
+
+    from .baseclip import BaseCLIP
+
+    InterpolationModeConvertible = TF.InterpolationMode | str | int
+
 
 class ZeroShotRIS(nn.Module):
     alpha = 0.95
@@ -13,18 +24,20 @@ class ZeroShotRIS(nn.Module):
 
     def __init__(
         self,
-        clip_pretrained_path,
-        is_hf_model,
-        solo_config,
-        solo_state_dict_path,
-        clip_interpolation_mode=TF.InterpolationMode.BICUBIC,
+        clip_pretrained_path: str,
+        is_hf_model: bool,
+        solo_config: object,
+        solo_state_dict_path: FILE_LIKE,
+        clip_interpolation_mode: InterpolationModeConvertible,
+        *clip_args,
+        **clip_kwargs,
     ) -> None:
         super().__init__()
 
-        self.clip = (
-            CustomHFCLIP(clip_pretrained_path)
+        self.clip: BaseCLIP = (
+            CustomHFCLIP(clip_pretrained_path, *clip_args, **clip_kwargs)
             if is_hf_model
-            else CustomOpenCLIP(clip_pretrained_path)
+            else CustomOpenCLIP(clip_pretrained_path, *clip_args, **clip_kwargs)
         )
         self.freesolo = CustomFreeSOLO(solo_config, solo_state_dict_path)
 
@@ -33,7 +46,7 @@ class ZeroShotRIS(nn.Module):
         )
 
     @staticmethod
-    def get_torchvision_interpolation_mode(mode):
+    def get_torchvision_interpolation_mode(mode) -> TF.InterpolationMode:
         if isinstance(mode, TF.InterpolationMode):
             return mode
 
@@ -46,27 +59,31 @@ class ZeroShotRIS(nn.Module):
         msg = f"Unsupported interpolation mode: {mode}"
         raise ValueError(msg)
 
-    def get_cropped_features(self, image_input: torch.Tensor, pred_boxes, pred_masks):
-        clip_image_size = self.clip.image_size
-
+    def get_cropped_tensor(
+        self,
+        image_input: torch.Tensor,
+        pred_boxes: torch.Tensor,
+        pred_masks: torch.Tensor,
+    ):
+        # Fill the image outside of the mask but inside the bounding box with
+        # the following pixel_mean
         pixel_mean = torch.tensor(
             [0.485, 0.456, 0.406],
             device=image_input.device,
             dtype=image_input.dtype,
         ).reshape(3, 1, 1)
 
+        # image_input: (3, H, W)
+        # pred_masks: (B, H, W)
+        channeled_pred_mask = pred_masks.unsqueeze(1)
+        masked_images = (
+            image_input * channeled_pred_mask + ~channeled_pred_mask * pixel_mean
+        )
+
+        clip_image_size = self.clip.image_size
         cropped_imgs = []
-
-        for pred_box, pred_mask in zip(pred_boxes, pred_masks, strict=True):
-            # pred_mask, pred_box = pred_mask.type(torch.uint8), pred_box.type(torch.int)
-            masked_image = image_input * pred_mask + ~pred_mask * pixel_mean
-
-            x1, y1, x2, y2 = (
-                int(pred_box[0]),
-                int(pred_box[1]),
-                int(pred_box[2]),
-                int(pred_box[3]),
-            )
+        for pred_box, masked_image in zip(pred_boxes, masked_images, strict=True):
+            x1, y1, x2, y2 = pred_box.tolist()
 
             masked_image = TF.resized_crop(
                 masked_image,
@@ -81,7 +98,16 @@ class ZeroShotRIS(nn.Module):
 
             cropped_imgs.append(masked_image)
 
-        cropped_tensor = torch.stack(cropped_imgs)
+        return torch.stack(cropped_imgs)
+
+    def get_cropped_features(
+        self,
+        image_input: torch.Tensor,
+        pred_boxes: torch.Tensor,
+        pred_masks: torch.Tensor,
+    ):
+        # Separated in a different function to invoke gc faster
+        cropped_tensor = self.get_cropped_tensor(image_input, pred_boxes, pred_masks)
 
         return self.clip.get_image_features(cropped_tensor)
 
@@ -154,6 +180,7 @@ class ZeroShotRIS(nn.Module):
                 print("The image input should be of a single batch size.")
             image_input = image_input[0]
 
+        # Get boxes from the output
         pred_boxes, pred_masks = self.freesolo(image_input)
 
         if len(pred_masks) == 0:
@@ -163,6 +190,9 @@ class ZeroShotRIS(nn.Module):
                 dtype=image_input.dtype,
                 device=image_input.device,
             )
+
+        # Convert to integer type and move to cpu
+        pred_boxes = pred_boxes.tensor.to(dtype=torch.int, device="cpu")
 
         visual_feature = self.get_visual_feature(image_input, pred_boxes, pred_masks)
 

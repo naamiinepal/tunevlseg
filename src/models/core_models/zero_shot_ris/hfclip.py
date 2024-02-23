@@ -1,26 +1,41 @@
-import math
+from __future__ import annotations
 
-import torch
-from torch import nn
-from transformers import CLIPModel
-from transformers.modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+from typing import TYPE_CHECKING
 
+from transformers.modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPooling,
+)
+from transformers.models.clip.modeling_clip import CLIPModel
+
+from .baseclip import BaseCLIP
 from .utils import (
     clip_encoder_common_outputs,
-    get_mask_mixed_embed,
+    get_hf_masked_states,
 )
 
+if TYPE_CHECKING:
+    from pathlib import PurePath
 
-class CustomHFCLIP(nn.Module):
-    def __init__(self, clip_pretrained_path) -> None:
-        super().__init__()
+    import torch
 
-        self.model: CLIPModel = CLIPModel.from_pretrained(clip_pretrained_path)  # type:ignore
 
-        vision_config = self.model.config.vision_config  # type:ignore
+class CustomHFCLIP(BaseCLIP):
+    model: CLIPModel
 
-        self.image_size: int = vision_config.image_size
-        self.patch_size: int = vision_config.patch_size
+    def __init__(self, clip_pretrained_path: PurePath | str, *args, **kwargs) -> None:
+        model: CLIPModel = CLIPModel.from_pretrained(
+            clip_pretrained_path,
+            *args,
+            **kwargs,
+        )  # type:ignore
+
+        vision_config = model.config.vision_config  # type:ignore
+
+        image_size: int = vision_config.image_size
+        patch_size: int = vision_config.patch_size
+
+        super().__init__(model=model, image_size=image_size, patch_size=patch_size)
 
     def get_vision_encoder_output(
         self,
@@ -49,10 +64,9 @@ class CustomHFCLIP(nn.Module):
             return_dict if return_dict is not None else model.config.use_return_dict
         )
 
-        encoder_states = ()
-        all_attentions = ()
-
         if pred_masks is None:
+            encoder_states = ()
+            all_attentions = ()
             hidden_states = inputs_embeds
             for encoder_layer in model.layers:
                 (
@@ -70,64 +84,17 @@ class CustomHFCLIP(nn.Module):
                     output_attentions,
                     output_hidden_states,
                 )
-
         else:
-            patch_len = inputs_embeds.size(1) - 1
-            size = math.isqrt(patch_len)
-
-            if size * size != patch_len:
-                msg = "The number of patches in the image must be a perfect square."
-                raise ValueError(msg)
-
-            non_masked_blocks: nn.ModuleList = model.layers[:masking_block_idx]  # type:ignore
-            masked_blocks: nn.ModuleList = model.layers[masking_block_idx:]  # type:ignore
-
-            hidden_states = inputs_embeds
-            for encoder_layer in non_masked_blocks:
-                (
-                    all_attentions,
-                    encoder_states,
-                    hidden_states,
-                ) = clip_encoder_common_outputs(
-                    all_attentions,
-                    attention_mask,
-                    causal_attention_mask,
-                    encoder_layer,
-                    encoder_states,
-                    hidden_states,
-                    model,
-                    output_attentions,
-                    output_hidden_states,
-                )
-
-            # mask_shape: (B, size, size) -> (B, 1, size, size)
-            pred_masks = pred_masks.unsqueeze(1)
-            num_masks = pred_masks.size(0)
-
-            for encoder_layer in masked_blocks:
-                hidden_states = get_mask_mixed_embed(
-                    hidden_states,
-                    num_masks,
-                    patch_len,
-                    pred_masks,
-                    size,
-                )
-
-                (
-                    all_attentions,
-                    encoder_states,
-                    hidden_states,
-                ) = clip_encoder_common_outputs(
-                    all_attentions,
-                    attention_mask,
-                    causal_attention_mask,
-                    encoder_layer,
-                    encoder_states,
-                    hidden_states,
-                    model,
-                    output_attentions,
-                    output_hidden_states,
-                )
+            encoder_states, hidden_states, all_attentions = get_hf_masked_states(
+                inputs_embeds,
+                pred_masks,
+                masking_block_idx,
+                model,
+                attention_mask,
+                causal_attention_mask,
+                output_attentions,
+                output_hidden_states,
+            )
 
         encoder_states = (
             (*encoder_states, hidden_states) if output_hidden_states else None
@@ -150,7 +117,7 @@ class CustomHFCLIP(nn.Module):
 
     def get_vision_model_output(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         pred_masks: torch.Tensor | None = None,
         masking_block_idx: int | None = None,
         output_attentions: bool | None = None,
@@ -201,12 +168,14 @@ class CustomHFCLIP(nn.Module):
 
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         pred_masks: torch.Tensor | None = None,
         masking_block_idx: int | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
+        *args,
+        **kwargs,
     ) -> torch.FloatTensor:
         model = self.model
         # Use CLIP model's config for some fields (if specified) instead of those of vision & text components.

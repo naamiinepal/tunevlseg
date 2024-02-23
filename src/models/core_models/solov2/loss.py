@@ -23,16 +23,24 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 # -------------------------------------------------------------------------
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, TypeVar
 
 import torch
 from fvcore.nn import sigmoid_focal_loss_jit
 from torch import nn
-from torch.nn import functional as F
+
+if TYPE_CHECKING:
+    import numpy as np
+
+    NDTensor = TypeVar("NDTensor", torch.Tensor, np.ndarray)
 
 
-def dice_loss(input, target):
-    input = input.contiguous().view(input.size()[0], -1)
-    target = target.contiguous().view(target.size()[0], -1).float()
+def dice_loss(input: torch.Tensor, target: torch.Tensor):
+    input = input.reshape(input.size(0), -1)
+    target = target.reshape(target.size(0), -1).float()
 
     a = torch.sum(input * target, 1)
     b = torch.sum(input * input, 1) + 0.001
@@ -41,7 +49,7 @@ def dice_loss(input, target):
     return 1 - d
 
 
-def reduce_loss(loss, reduction):
+def reduce_loss(loss: NDTensor, reduction: str) -> NDTensor:
     """Reduce loss as specified.
 
     Args:
@@ -54,18 +62,19 @@ def reduce_loss(loss, reduction):
         Tensor: Reduced loss tensor.
 
     """
-    reduction_enum = F._Reduction.get_enum(reduction)
-    # none: 0, elementwise_mean:1, sum: 2
-    if reduction_enum == 0:
-        return loss
-    if reduction_enum == 1:
-        return loss.mean()
-    if reduction_enum == 2:
-        return loss.sum()
-    return None
+    if reduction == "sum":
+        return loss.sum()  # type:ignore
+    if reduction.endswith("mean"):
+        return loss.mean()  # type:ignore
+    return loss
 
 
-def weight_reduce_loss(loss, weight=None, reduction="mean", avg_factor=None):
+def weight_reduce_loss(
+    loss: NDTensor,
+    weight: float | NDTensor | None = None,
+    reduction: str = "mean",
+    avg_factor: float | NDTensor | None = None,
+):
     """Apply element-wise weight and reduce loss.
 
     Args:
@@ -86,24 +95,24 @@ def weight_reduce_loss(loss, weight=None, reduction="mean", avg_factor=None):
 
     # if avg_factor is not specified, just reduce the loss
     if avg_factor is None:
-        loss = reduce_loss(loss, reduction)
-    elif reduction == "mean":
-        loss = loss.sum() / avg_factor
-    # if reduction is 'none', then do nothing, otherwise raise an error
-    elif reduction != "none":
+        return reduce_loss(loss, reduction)
+    if reduction == "sum":
         msg = 'avg_factor can not be used with reduction="sum"'
         raise ValueError(msg)
+    if reduction == "mean":
+        return loss.sum() / avg_factor  # type:ignore numpy returns the sum as Any
+    # if reduction is 'none', then do nothing
     return loss
 
 
 def sigmoid_focal_loss(
-    pred,
-    target,
-    weight=None,
-    gamma=2.0,
-    alpha=0.25,
-    reduction="mean",
-    avg_factor=None,
+    pred: torch.Tensor,
+    target: torch.Tensor,
+    weight: torch.Tensor | None = None,
+    gamma: float = 2,
+    alpha: float = 0.25,
+    reduction: str = "mean",
+    avg_factor: float | torch.Tensor | None = None,
 ):
     # Function.apply does not accept keyword arguments, so the decorator
     # "weighted_loss" is not applicable
@@ -125,22 +134,12 @@ def sigmoid_focal_loss(
     return weight_reduce_loss(loss, weight, reduction, avg_factor)
 
 
+@dataclass
 class FocalLoss(nn.Module):
-    def __init__(
-        self,
-        use_sigmoid=True,
-        gamma=2.0,
-        alpha=0.25,
-        reduction="mean",
-        loss_weight=1.0,
-    ) -> None:
-        super().__init__()
-        assert use_sigmoid is True, "Only sigmoid focal loss supported now."
-        self.use_sigmoid = use_sigmoid
-        self.gamma = gamma
-        self.alpha = alpha
-        self.reduction = reduction
-        self.loss_weight = loss_weight
+    gamma: float = 2
+    alpha: float = 0.25
+    reduction: str = "mean"
+    loss_weight: float | torch.Tensor = 1.0
 
     def forward(
         self,
@@ -152,16 +151,12 @@ class FocalLoss(nn.Module):
     ):
         assert reduction_override in {None, "none", "mean", "sum"}
         reduction = reduction_override if reduction_override else self.reduction
-        if self.use_sigmoid:
-            loss_cls = self.loss_weight * sigmoid_focal_loss(
-                pred,
-                target,
-                weight,
-                gamma=self.gamma,
-                alpha=self.alpha,
-                reduction=reduction,
-                avg_factor=avg_factor,
-            )
-        else:
-            raise NotImplementedError
-        return loss_cls
+        return self.loss_weight * sigmoid_focal_loss(
+            pred,
+            target,
+            weight,
+            gamma=self.gamma,
+            alpha=self.alpha,
+            reduction=reduction,
+            avg_factor=avg_factor,
+        )

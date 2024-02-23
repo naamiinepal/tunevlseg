@@ -23,13 +23,21 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 # -------------------------------------------------------------------------
+from __future__ import annotations
+
+from collections.abc import Iterable, Sequence
+from typing import TYPE_CHECKING
 
 import cv2
 import torch
-import torch.nn.functional as F
+from torch.nn import functional as F
+
+if TYPE_CHECKING:
+    from _typeshed import ConvertibleToFloat
+    from cv2.typing import MatLike, Size
 
 
-def _scale_size(size, scale):
+def _scale_size(size: Iterable[float], scale: ConvertibleToFloat):
     """Rescale a size by a ratio.
 
     Args:
@@ -55,7 +63,13 @@ interp_codes = {
 }
 
 
-def imresize(img, size, return_scale=False, interpolation="bilinear", out=None):
+def imresize(
+    img: MatLike,
+    size: Size,
+    return_scale: bool = False,
+    interpolation: str = "bilinear",
+    out: MatLike | None = None,
+):
     """Resize image to a given size.
 
     Args:
@@ -87,7 +101,12 @@ def imresize(img, size, return_scale=False, interpolation="bilinear", out=None):
     return resized_img, w_scale, h_scale
 
 
-def imresize_like(img, dst_img, return_scale=False, interpolation="bilinear"):
+def imresize_like(
+    img: MatLike,
+    dst_img: MatLike,
+    return_scale: bool = False,
+    interpolation: str = "bilinear",
+):
     """Resize image to the same size of a given image.
 
     Args:
@@ -107,7 +126,11 @@ def imresize_like(img, dst_img, return_scale=False, interpolation="bilinear"):
     return imresize(img, (w, h), return_scale, interpolation)
 
 
-def rescale_size(old_size, scale, return_scale=False):
+def rescale_size(
+    old_size: Iterable[float],
+    scale: Iterable[float] | float,
+    return_scale: bool = False,
+):
     """Calculate the new size to be rescaled to.
 
     Args:
@@ -131,7 +154,7 @@ def rescale_size(old_size, scale, return_scale=False):
             msg = f"Invalid scale {scale}, must be positive."
             raise ValueError(msg)
         scale_factor = scale
-    elif isinstance(scale, tuple):
+    elif isinstance(scale, Iterable):
         max_long_edge = max(scale)
         max_short_edge = min(scale)
         scale_factor = min(max_long_edge / max(h, w), max_short_edge / min(h, w))
@@ -146,7 +169,12 @@ def rescale_size(old_size, scale, return_scale=False):
     return new_size
 
 
-def imrescale(img, scale, return_scale=False, interpolation="bilinear"):
+def imrescale(
+    img: MatLike,
+    scale: Iterable[float] | float,
+    return_scale: bool = False,
+    interpolation: str = "bilinear",
+):
     """Resize image while keeping the aspect ratio.
 
     Args:
@@ -166,14 +194,15 @@ def imrescale(img, scale, return_scale=False, interpolation="bilinear"):
 
     """
     h, w = img.shape[:2]
-    new_size, scale_factor = rescale_size((w, h), scale, return_scale=True)
-    rescaled_img = imresize(img, new_size, interpolation=interpolation)
+    new_size: tuple[int, int]
+    new_size, scale_factor = rescale_size((w, h), scale, return_scale=True)  # type:ignore
+    rescaled_img: MatLike = imresize(img, new_size, interpolation=interpolation)  # type:ignore
     if return_scale:
         return rescaled_img, scale_factor
     return rescaled_img
 
 
-def center_of_mass(bitmasks):
+def center_of_mass(bitmasks: torch.Tensor):
     _, h, w = bitmasks.size()
 
     ys = torch.arange(0, h, dtype=torch.float32, device=bitmasks.device)
@@ -187,7 +216,7 @@ def center_of_mass(bitmasks):
     return center_x, center_y
 
 
-def point_nms(heat, kernel=2):
+def point_nms(heat: torch.Tensor, kernel: int = 2):
     # kernel must be 2
     hmax = F.max_pool2d(heat, (kernel, kernel), stride=1, padding=1)
     keep = (hmax[:, :, :-1, :-1] == heat).float()
@@ -195,16 +224,16 @@ def point_nms(heat, kernel=2):
 
 
 def matrix_nms(
-    cate_labels,
-    seg_masks,
-    sum_masks,
-    cate_scores,
-    sigma=2.0,
-    kernel="gaussian",
+    cate_labels: torch.Tensor,
+    seg_masks: torch.Tensor,
+    sum_masks: torch.Tensor,
+    cate_scores: torch.Tensor | float,
+    sigma: float = 2.0,
+    kernel: str = "gaussian",
 ):
     n_samples = len(cate_labels)
     if n_samples == 0:
-        return []
+        return torch.empty(0)
 
     seg_masks = seg_masks.reshape(n_samples, -1).float()
     # inter.
@@ -241,10 +270,16 @@ def matrix_nms(
     return cate_scores * delay_coefficient
 
 
-def mask_nms(cate_labels, seg_masks, sum_masks, cate_scores, nms_thr=0.5):
+def mask_nms(
+    cate_labels: Sequence,
+    seg_masks: torch.Tensor,
+    sum_masks: Sequence[float] | torch.Tensor,
+    cate_scores: torch.Tensor | MatLike,
+    nms_thr: float = 0.5,
+):
     n_samples = len(cate_scores)
     if n_samples == 0:
-        return []
+        return torch.empty(0)
 
     keep = seg_masks.new_ones(cate_scores.shape)
     seg_masks = seg_masks.float()
@@ -272,7 +307,7 @@ def mask_nms(cate_labels, seg_masks, sum_masks, cate_scores, nms_thr=0.5):
     return keep
 
 
-def dice_coefficient(x, target):
+def dice_coefficient(x: torch.Tensor, target: torch.Tensor):
     eps = 1e-5
     n_inst = x.size(0)
     x = x.reshape(n_inst, -1)
@@ -282,7 +317,7 @@ def dice_coefficient(x, target):
     return 1.0 - (2 * intersection / union)
 
 
-def masked_dice_coefficient(x, target, mask):
+def masked_dice_coefficient(x: torch.Tensor, target: torch.Tensor, mask: torch.Tensor):
     eps = 1e-5
     n_inst = x.size(0)
     x = x.reshape(n_inst, -1)
@@ -294,7 +329,7 @@ def masked_dice_coefficient(x, target, mask):
     return 1.0 - (2 * intersection / union)
 
 
-def unfold_wo_center(x, kernel_size, dilation):
+def unfold_wo_center(x: torch.Tensor, kernel_size: int, dilation: int):
     assert x.dim() == 4
     assert kernel_size % 2 == 1
 
@@ -326,7 +361,12 @@ def unfold_wo_center(x, kernel_size, dilation):
     )
 
 
-def get_images_color_similarity(images, image_masks, kernel_size, dilation):
+def get_images_color_similarity(
+    images: torch.Tensor,
+    image_masks: torch.Tensor,
+    kernel_size: int,
+    dilation: int,
+):
     assert images.dim() == 4
     assert images.size(0) == 1
 
@@ -349,7 +389,11 @@ def get_images_color_similarity(images, image_masks, kernel_size, dilation):
     return similarity * unfolded_weights
 
 
-def compute_pairwise_term(mask_logits, pairwise_size, pairwise_dilation):
+def compute_pairwise_term(
+    mask_logits: torch.Tensor,
+    pairwise_size: int,
+    pairwise_dilation: int,
+):
     assert mask_logits.dim() == 4
 
     log_fg_prob = F.logsigmoid(mask_logits)

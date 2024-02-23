@@ -1,6 +1,13 @@
+from __future__ import annotations
+
+import math
+from typing import TYPE_CHECKING
+
 import torch
 from torch import nn
-from transformers.models.clip.modeling_clip import CLIPEncoder
+
+if TYPE_CHECKING:
+    from transformers.models.clip.modeling_clip import CLIPEncoder
 
 
 def get_mask_mixed_embed(
@@ -74,3 +81,74 @@ def clip_encoder_common_outputs(
     if output_attentions:
         all_attentions = (*all_attentions, layer_outputs[1])
     return all_attentions, encoder_states, hidden_states
+
+
+def get_hf_masked_states(
+    inputs_embeds: torch.Tensor,
+    pred_masks: torch.Tensor,
+    masking_block_idx: int | None,
+    model: CLIPEncoder,
+    attention_mask: torch.Tensor | None,
+    causal_attention_mask: torch.Tensor | None,
+    output_attentions: bool | None,
+    output_hidden_states: bool | None,
+):
+    patch_len = inputs_embeds.size(1) - 1
+    size = math.isqrt(patch_len)
+
+    if size * size != patch_len:
+        msg = "The number of patches in the image must be a perfect square."
+        raise ValueError(msg)
+
+    non_masked_blocks: nn.ModuleList = model.layers[:masking_block_idx]  # type:ignore
+    masked_blocks: nn.ModuleList = model.layers[masking_block_idx:]  # type:ignore
+
+    all_attentions = ()
+    encoder_states = ()
+    hidden_states = inputs_embeds
+    for encoder_layer in non_masked_blocks:
+        (
+            all_attentions,
+            encoder_states,
+            hidden_states,
+        ) = clip_encoder_common_outputs(
+            all_attentions,
+            attention_mask,
+            causal_attention_mask,
+            encoder_layer,
+            encoder_states,
+            hidden_states,
+            model,
+            output_attentions,
+            output_hidden_states,
+        )
+
+    # mask_shape: (B, size, size) -> (B, 1, size, size)
+    pred_masks = pred_masks.unsqueeze(1)
+    num_masks = pred_masks.size(0)
+
+    for encoder_layer in masked_blocks:
+        hidden_states = get_mask_mixed_embed(
+            hidden_states,
+            num_masks,
+            patch_len,
+            pred_masks,
+            size,
+        )
+
+        (
+            all_attentions,
+            encoder_states,
+            hidden_states,
+        ) = clip_encoder_common_outputs(
+            all_attentions,
+            attention_mask,
+            causal_attention_mask,
+            encoder_layer,
+            encoder_states,
+            hidden_states,
+            model,
+            output_attentions,
+            output_hidden_states,
+        )
+    return encoder_states, hidden_states, all_attentions

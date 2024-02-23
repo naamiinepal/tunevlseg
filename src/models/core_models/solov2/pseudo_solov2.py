@@ -32,6 +32,10 @@
 # Modified by Xinlong Wang
 # -------------------------------------------------------------------------
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
 import torch
 import torch.nn.functional as F
 from skimage import color
@@ -40,14 +44,17 @@ from ..detectron2.structures import ImageList
 from .solov2 import SOLOv2
 from .utils import get_images_color_similarity, point_nms
 
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Mapping, Sequence
+
 
 class PseudoSOLOv2(SOLOv2):
     def forward(
         self,
-        batched_inputs,
-        branch="supervised",
-        given_proposals=None,
-        val_mode=False,
+        batched_inputs: Sequence[Mapping[str, Any]],
+        branch: object = "supervised",
+        given_proposals: object = None,
+        val_mode: object = False,
     ):
         original_images = [x["image"] for x in batched_inputs]
         images = self.preprocess_image(
@@ -58,7 +65,8 @@ class PseudoSOLOv2(SOLOv2):
         if self.is_freemask:
             return [features]
 
-        if "instances" in batched_inputs[0]:
+        contains_gt = "instances" in batched_inputs[0]
+        if contains_gt:
             gt_instances = [x["instances"] for x in batched_inputs]
             original_image_masks = [
                 torch.ones_like(x[0], dtype=torch.float32) for x in original_images
@@ -115,18 +123,27 @@ class PseudoSOLOv2(SOLOv2):
                 batched_inputs,
             )
 
-        if branch == "supervised":
+        if contains_gt and branch == "supervised":
             mask_feat_size = mask_pred.size()[-2:]
-            targets = self.get_ground_truth(gt_instances, mask_feat_size)
+            targets = self.get_ground_truth(gt_instances, mask_feat_size)  # type:ignore
             return self.loss(cate_pred, kernel_pred, emb_pred, mask_pred, targets)
         return None
 
-    def add_bitmasks_from_boxes(self, instances, images, image_masks) -> None:
+    def add_bitmasks_from_boxes(
+        self,
+        instances: Iterable,
+        images: torch.Tensor,
+        image_masks: torch.Tensor,
+    ) -> None:
         stride = 4
         start = int(stride // 2)
 
-        assert images.size(2) % stride == 0
-        assert images.size(3) % stride == 0
+        assert (
+            images.size(2) % stride == 0
+        ), f"The third dimension of image: {images.size(2)} must be divisible by stride: {stride}"
+        assert (
+            images.size(3) % stride == 0
+        ), f"The fourth dimension of image: {images.size(3)} must be divisible by stride: {stride}"
 
         downsampled_images = F.avg_pool2d(
             images.float(),

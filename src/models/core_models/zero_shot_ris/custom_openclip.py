@@ -1,32 +1,38 @@
+from __future__ import annotations
+
 import math
-from typing import Any
 
 import open_clip
 import torch
 from timm.models import VisionTransformer, checkpoint_seq
 from torch import nn
 
+from .baseclip import BaseCLIP
 from .utils import get_mask_mixed_embed
 
 
-class CustomOpenCLIP(nn.Module):
-    def __init__(self, clip_pretrained_path) -> None:
-        super().__init__()
+class CustomOpenCLIP(BaseCLIP):
+    model: open_clip.CustomTextCLIP
 
-        self.model: open_clip.CustomTextCLIP = open_clip.create_model(
-            clip_pretrained_path,
+    def __init__(self, model_name: str, *args, **kwargs) -> None:
+        model: open_clip.CustomTextCLIP = open_clip.create_model(
+            model_name,
+            *args,
+            **kwargs,
         )  # type:ignore
 
-        visual = self.model.visual  # type:ignore
-        image_size = visual.image_size
-        self.image_size: int = (
-            image_size if isinstance(image_size, int) else image_size[0]
+        visual = model.visual  # type:ignore
+        visual_image_size = visual.image_size
+        image_size: int = (
+            visual_image_size
+            if isinstance(visual_image_size, int)
+            else visual_image_size[0]
         )  # type:ignore
 
         patch_size = visual.trunk.patch_embed.patch_size
-        self.patch_size: int = (
-            patch_size if isinstance(patch_size, int) else patch_size[0]
-        )  # type:ignore
+        patch_size: int = patch_size if isinstance(patch_size, int) else patch_size[0]  # type:ignore
+
+        super().__init__(model=model, image_size=image_size, patch_size=patch_size)
 
     def get_blocks_output(
         self,
@@ -90,9 +96,11 @@ class CustomOpenCLIP(nn.Module):
 
     def get_image_features(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         pred_masks: torch.Tensor | None = None,
         masking_block_idx: int | None = None,
+        *args,
+        **kwargs,
     ) -> torch.Tensor:
         x = self.get_trunk_output(pixel_values, pred_masks, masking_block_idx)
         return self.model.visual.head(x)
@@ -100,6 +108,7 @@ class CustomOpenCLIP(nn.Module):
     def get_text_features(
         self,
         input_ids: torch.Tensor,
-        attention_mask: Any = None,
+        *args,
+        **kwargs,
     ) -> torch.Tensor:
         return self.model.text(input_ids)
