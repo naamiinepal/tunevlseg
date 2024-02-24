@@ -1,16 +1,18 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from collections.abc import Callable
 from typing import Any
 
 import torch
 from torch import nn
 
 
-@dataclass(frozen=True)
 class BaseCLIP(nn.Module, ABC):
-    model: object
-    image_size: int
-    patch_size: int
+    def __init__(self, model: Callable, image_size: int, patch_size: int) -> None:
+        super().__init__()
+
+        self.model = model
+        self.image_size = image_size
+        self.patch_size = patch_size
 
     @abstractmethod
     def get_image_features(
