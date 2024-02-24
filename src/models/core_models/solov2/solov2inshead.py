@@ -144,10 +144,12 @@ class SOLOv2InsHead(nn.Module):
             for i in range(num_convs):
                 conv_func = nn.Conv2d
 
-                chn = self.instance_in_channels
-
-                if i == 0 and use_coord:
-                    chn += 2
+                if i == 0:
+                    chn = self.instance_in_channels
+                    if use_coord:
+                        chn += 2
+                else:
+                    chn = self.instance_channels
 
                 tower.append(
                     conv_func(

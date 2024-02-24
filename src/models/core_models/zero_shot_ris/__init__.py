@@ -26,9 +26,9 @@ class ZeroShotRIS(nn.Module):
         self,
         clip_pretrained_path: str,
         is_hf_model: bool,
+        clip_interpolation_mode: InterpolationModeConvertible,
         solo_config: object,
         solo_state_dict_path: FILE_LIKE,
-        clip_interpolation_mode: InterpolationModeConvertible,
         *clip_args,
         **clip_kwargs,
     ) -> None:
@@ -39,11 +39,12 @@ class ZeroShotRIS(nn.Module):
             if is_hf_model
             else CustomOpenCLIP(clip_pretrained_path, *clip_args, **clip_kwargs)
         )
-        self.freesolo = CustomFreeSOLO(solo_config, solo_state_dict_path)
 
         self.clip_interpolation_mode = self.get_torchvision_interpolation_mode(
             clip_interpolation_mode,
         )
+
+        self.freesolo = CustomFreeSOLO(solo_config, solo_state_dict_path)
 
     @staticmethod
     def get_torchvision_interpolation_mode(mode) -> TF.InterpolationMode:
