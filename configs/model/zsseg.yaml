@@ -5,6 +5,8 @@ net:
   clip_pretrained_path: ${model_pretrained_path}
   clip_interpolation_mode: ${import_eval:torchvision.transforms.functional.InterpolationMode.BICUBIC}
   is_hf_model: ${is_hf_model}
+  alpha: 0.95
+  beta: 0.5
   solo_state_dict_path: ${paths.pretrain_dir}/FreeSOLO_R101_30k.pt
   solo_config:
     MODEL:

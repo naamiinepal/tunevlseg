@@ -19,9 +19,6 @@ if TYPE_CHECKING:
 
 
 class ZeroShotRIS(nn.Module):
-    alpha = 0.95
-    beta = 0.5
-
     def __init__(
         self,
         clip_pretrained_path: str,
@@ -29,6 +26,8 @@ class ZeroShotRIS(nn.Module):
         clip_interpolation_mode: InterpolationModeConvertible,
         solo_config: object,
         solo_state_dict_path: FILE_LIKE,
+        alpha: float = 0.95,
+        beta: float = 0.5,
         *clip_args,
         **clip_kwargs,
     ) -> None:
@@ -45,6 +44,9 @@ class ZeroShotRIS(nn.Module):
         )
 
         self.freesolo = CustomFreeSOLO(solo_config, solo_state_dict_path)
+
+        self.alpha = alpha
+        self.beta = beta
 
     @staticmethod
     def get_torchvision_interpolation_mode(mode) -> TF.InterpolationMode:
