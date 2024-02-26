@@ -72,15 +72,18 @@ class ZeroShotRIS(nn.Module):
     ):
         # Fill the image outside of the mask but inside the bounding box with
         # the following pixel_mean
-        pixel_mean = torch.tensor(
-            [0.485, 0.456, 0.406],
-            device=image_input.device,
-            dtype=image_input.dtype,
-        ).reshape(3, 1, 1)
+        # shape: (3, 1, 1)
+        pixel_mean = image_input.mean((1, 2), keepdim=True)
 
-        # image_input: (3, H, W)
+        # pixel_mean = torch.tensor(
+        #     [0.485, 0.456, 0.406],
+        #     device=image_input.device,
+        #     dtype=image_input.dtype,
+        # ).reshape(3, 1, 1)
+
         # pred_masks: (B, H, W)
         channeled_pred_mask = pred_masks.unsqueeze(1)
+        # image_input: (3, H, W)
         masked_images = (
             image_input * channeled_pred_mask + ~channeled_pred_mask * pixel_mean
         )
