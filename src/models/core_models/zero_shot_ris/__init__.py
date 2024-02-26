@@ -61,14 +61,14 @@ class ZeroShotRIS(nn.Module):
         if isinstance(mode, int):
             return TF._interpolation_modes_from_int(mode)
 
-        msg = f"Unsupported interpolation mode: {mode}"
+        msg = f"Unsupported interpolation mode: {mode} of type: {type(mode)}"
         raise ValueError(msg)
 
     def get_cropped_tensor(
         self,
         image_input: torch.Tensor,
-        pred_boxes: torch.Tensor,
-        pred_masks: torch.Tensor,
+        pred_boxes: torch.IntTensor,
+        pred_masks: torch.BoolTensor,
     ):
         # Fill the image outside of the mask but inside the bounding box with
         # the following pixel_mean
@@ -111,8 +111,8 @@ class ZeroShotRIS(nn.Module):
     def get_cropped_features(
         self,
         image_input: torch.Tensor,
-        pred_boxes: torch.Tensor,
-        pred_masks: torch.Tensor,
+        pred_boxes: torch.IntTensor,
+        pred_masks: torch.BoolTensor,
     ):
         # Separated in a different function to invoke gc faster
         cropped_tensor = self.get_cropped_tensor(image_input, pred_boxes, pred_masks)
@@ -139,7 +139,11 @@ class ZeroShotRIS(nn.Module):
 
         return logits_per_image.argmax()
 
-    def get_mask_features(self, image_input: torch.Tensor, pred_masks):
+    def get_mask_features(
+        self,
+        image_input: torch.Tensor,
+        pred_masks: torch.BoolTensor,
+    ):
         clip_image_size = self.clip.image_size
 
         resized_image = TF.resize(
@@ -152,13 +156,13 @@ class ZeroShotRIS(nn.Module):
         patch_size = self.clip.patch_size
         mask_size = clip_image_size // patch_size
 
-        # Add channel dimension to the pred_masks
-        resized_masks = torch.stack(
-            [
-                TF.resize(mask, [mask_size, mask_size], antialias=False)
-                for mask in pred_masks.unsqueeze(1)
-            ],
-        ).squeeze(1)
+        # pred_masks: shape (B, H, W)
+        # convert mask to float first before bilinear interpolation
+        resized_masks = TF.resize(
+            pred_masks.to(dtype=image_input.dtype),
+            size=[mask_size, mask_size],
+            antialias=False,
+        )
 
         return self.clip.get_image_features(
             pixel_values=resized_image.unsqueeze(0),
@@ -166,7 +170,12 @@ class ZeroShotRIS(nn.Module):
             masking_block_idx=self.masking_block_idx,
         )
 
-    def get_visual_feature(self, image_input: torch.Tensor, pred_boxes, pred_masks):
+    def get_visual_feature(
+        self,
+        image_input: torch.Tensor,
+        pred_boxes: torch.IntTensor,
+        pred_masks: torch.BoolTensor,
+    ):
         mask_features = self.get_mask_features(image_input, pred_masks)
 
         crop_features = self.get_cropped_features(image_input, pred_boxes, pred_masks)
@@ -208,6 +217,6 @@ class ZeroShotRIS(nn.Module):
 
         max_index = self.get_max_index(text_ensemble, visual_feature)
 
-        selected_mask: torch.Tensor = pred_masks[max_index]
+        selected_mask: torch.BoolTensor = pred_masks[max_index]
 
         return selected_mask[None, None, ...].float()
