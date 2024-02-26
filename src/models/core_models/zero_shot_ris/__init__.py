@@ -50,6 +50,16 @@ class ZeroShotRIS(nn.Module):
         self.alpha = alpha
         self.beta = beta
 
+        # Get model's output only when its weight is non-zero
+        self.get_mask_features = (
+            self._get_mask_features if alpha != 0 else nn.Identity()
+        )
+
+        # Get model's output only when its weight is non-zero
+        self.get_cropped_features = (
+            self._get_cropped_features if alpha != 1 else nn.Identity()
+        )
+
     @staticmethod
     def get_torchvision_interpolation_mode(mode) -> TF.InterpolationMode:
         if isinstance(mode, TF.InterpolationMode):
@@ -108,7 +118,7 @@ class ZeroShotRIS(nn.Module):
 
         return torch.stack(cropped_imgs)
 
-    def get_cropped_features(
+    def _get_cropped_features(
         self,
         image_input: torch.Tensor,
         pred_boxes: torch.IntTensor,
@@ -139,7 +149,7 @@ class ZeroShotRIS(nn.Module):
 
         return logits_per_image.argmax()
 
-    def get_mask_features(
+    def _get_mask_features(
         self,
         image_input: torch.Tensor,
         pred_masks: torch.BoolTensor,
@@ -177,7 +187,6 @@ class ZeroShotRIS(nn.Module):
         pred_masks: torch.BoolTensor,
     ):
         mask_features = self.get_mask_features(image_input, pred_masks)
-
         crop_features = self.get_cropped_features(image_input, pred_boxes, pred_masks)
 
         return self.alpha * mask_features + (1 - self.alpha) * crop_features
