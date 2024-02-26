@@ -26,6 +26,7 @@ class ZeroShotRIS(nn.Module):
         clip_interpolation_mode: InterpolationModeConvertible,
         solo_config: object,
         solo_state_dict_path: FILE_LIKE,
+        masking_block_idx: int | None = -3,
         alpha: float = 0.95,
         beta: float = 0.5,
         *clip_args,
@@ -45,6 +46,7 @@ class ZeroShotRIS(nn.Module):
 
         self.freesolo = CustomFreeSOLO(solo_config, solo_state_dict_path)
 
+        self.masking_block_idx = masking_block_idx
         self.alpha = alpha
         self.beta = beta
 
@@ -158,7 +160,7 @@ class ZeroShotRIS(nn.Module):
         return self.clip.get_image_features(
             pixel_values=resized_image.unsqueeze(0),
             pred_masks=resized_masks,
-            masking_block_idx=-3,
+            masking_block_idx=self.masking_block_idx,
         )
 
     def get_visual_feature(self, image_input: torch.Tensor, pred_boxes, pred_masks):
