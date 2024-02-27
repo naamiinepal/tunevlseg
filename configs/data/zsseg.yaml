@@ -1,9 +1,9 @@
 _target_: src.data.image_text_mask_datamodule.ImageTextDatamodule
 val_ds:
   _target_: src.data.core_datasets.zeroshot_dataset.ZeroShotDataset
-  images_dir: ${data_root}/kvasir_polyp/images
-  masks_dir: ${data_root}/kvasir_polyp/masks
-  caps_file: ${data_root}/kvasir_polyp/anns/val.json
+  images_dir: ${dataset_root}/images
+  masks_dir: ${dataset_root}/masks
+  caps_file: ${dataset_root}/anns/val.json
   tokenizer_pretrained_path: ${tokenizer_pretrained_path}
   prompt_type: ${prompt_type}
   object_class: polyp
@@ -12,9 +12,9 @@ val_ds:
 
 test_ds:
   _target_: src.data.core_datasets.zeroshot_dataset.ZeroShotDataset
-  images_dir: ${data_root}/kvasir_polyp/images
-  masks_dir: ${data_root}/kvasir_polyp/masks
-  caps_file: ${data_root}/kvasir_polyp/anns/test.json
+  images_dir: ${dataset_root}/images
+  masks_dir: ${dataset_root}/masks
+  caps_file: ${dataset_root}/anns/test.json
   tokenizer_pretrained_path: ${tokenizer_pretrained_path}
   prompt_type: ${prompt_type}
   object_class: polyp

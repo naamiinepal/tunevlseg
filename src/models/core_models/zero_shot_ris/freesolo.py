@@ -11,11 +11,14 @@ class CustomFreeSOLO(nn.Module):
         self,
         solo_config: object,
         solo_state_dict_path: FILE_LIKE,
+        threshold_mask: bool = True,
         *args,
         **kwargs,
     ) -> None:
         super().__init__()
         self.model = self.load_model(solo_config, solo_state_dict_path, *args, **kwargs)
+
+        self.mask_attr = "pred_masks" if threshold_mask else "float_pred_masks"
 
     @staticmethod
     def load_model(
@@ -46,8 +49,8 @@ class CustomFreeSOLO(nn.Module):
             },
         ]
 
-        solo_pred = self.model(batched_images)[0]
+        solo_pred_instances = self.model(batched_images)[0]["instances"]
 
-        pred_boxes: Boxes = solo_pred["instances"].pred_boxes
-        pred_masks: torch.Tensor = solo_pred["instances"].pred_masks
+        pred_boxes: Boxes = solo_pred_instances.pred_boxes
+        pred_masks: torch.Tensor = getattr(solo_pred_instances, self.mask_attr)
         return pred_boxes, pred_masks

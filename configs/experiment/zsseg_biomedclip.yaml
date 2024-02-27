@@ -38,7 +38,7 @@ model:
 data:
   drop_last: false
   pin_memory: false
-  num_workers: 2
+  num_workers: 4
 
 logger:
   wandb:
@@ -52,6 +52,10 @@ logger:
 ############################
 # Additional parameters    #
 ############################
+
+ds_name: kvasir_polyp
+dataset_root: ${data_root}/${ds_name}
+cache_dir: ${dataset_root}/zsseg_cache
 
 model_pretrained_path: hf-hub:microsoft/BiomedCLIP-PubMedBERT_256-vit_base_patch16_224
 is_hf_model: false

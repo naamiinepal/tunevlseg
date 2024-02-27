@@ -40,6 +40,7 @@ class ImageTextMaskModule(LightningModule):
         log_image_num: int = 8,
         lr_scheduler_config: MappingStr2Any | None = None,
         activation_fn: Callable[[torch.Tensor], torch.Tensor] | None = torch.sigmoid,
+        cache_outputs: bool = False,
         *args,
         **kwargs,
     ) -> None:
@@ -260,6 +261,10 @@ class ImageTextMaskModule(LightningModule):
 
     def get_logits(self, batch: MappingStr2Any) -> torch.Tensor:
         text_input = {k: batch[k] for k in ("input_ids", "attention_mask")}
+
+        if getattr(self.hparams, "cache_outputs", False):
+            text_input["cache_name"] = batch["cache_name"]
+
         img = batch["image"]
 
         return self(image_input=img, text_input=text_input)

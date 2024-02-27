@@ -797,16 +797,19 @@ class SOLOv2(nn.Module):
             )
         ).squeeze(0)
 
-        seg_masks = seg_masks > self.mask_threshold
+        bool_seg_masks = seg_masks > self.mask_threshold
 
-        sum_masks = seg_masks.sum((1, 2)).float()
+        sum_masks = bool_seg_masks.sum((1, 2)).float()
 
         # filter.
         keep = sum_masks > 0
         scores = scores[keep]
         cate_scores = cate_scores[keep]
         cate_labels = cate_labels[keep]
+
         seg_masks = seg_masks[keep]
+        bool_seg_masks = bool_seg_masks[keep]
+
         maskness = maskness[keep]
         emb_preds = emb_preds[keep]
 
@@ -815,7 +818,10 @@ class SOLOv2(nn.Module):
         results.scores = scores
         results.category_scores = cate_scores
         results.maskness = maskness
-        results.pred_masks = seg_masks
+
+        # Also return float masks along with the thresholded segmentations
+        results.pred_masks = bool_seg_masks
+        results.float_pred_masks = seg_masks
         # normalize the embeddings
         results.pred_embs = emb_preds / emb_preds.norm(dim=-1, keepdim=True)
 
@@ -904,7 +910,11 @@ class SOLOv2(nn.Module):
         if keep.sum() == 0:
             results = Instances(ori_size)
             results.pred_classes = torch.tensor([])
-            results.pred_masks = torch.tensor([])
+
+            # Also return float masks along with the thresholded segmentations
+            results.pred_masks = torch.tensor([], dtype=torch.bool)
+            results.float_pred_masks = torch.tensor([])
+
             results.pred_boxes = Boxes(torch.tensor([]))
             results.scores = torch.tensor([])
             results.category_scores = torch.tensor([])
@@ -920,7 +930,6 @@ class SOLOv2(nn.Module):
         emb_preds = emb_preds[keep, :]
 
         # maskness.
-        seg_masks = seg_preds > self.mask_threshold
         maskness = (seg_preds * seg_masks.float()).sum((1, 2)) / seg_masks.sum((1, 2))
 
         scores = cate_scores * maskness
@@ -929,6 +938,7 @@ class SOLOv2(nn.Module):
         sort_inds = torch.argsort(scores, descending=True)
         if len(sort_inds) > self.max_before_nms:
             sort_inds = sort_inds[: self.max_before_nms]
+
         seg_masks = seg_masks[sort_inds, :, :]
         seg_preds = seg_preds[sort_inds, :, :]
         sum_masks = sum_masks[sort_inds]
@@ -964,7 +974,11 @@ class SOLOv2(nn.Module):
         if keep.sum() == 0:
             results = Instances(ori_size)
             results.pred_classes = torch.tensor([])
-            results.pred_masks = torch.tensor([])
+
+            # Also return float masks along with the thresholded segmentations
+            results.pred_masks = torch.tensor([], dtype=torch.bool)
+            results.float_pred_masks = torch.tensor([])
+
             results.pred_boxes = Boxes(torch.tensor([]))
             results.scores = torch.tensor([])
             results.category_scores = torch.tensor([])

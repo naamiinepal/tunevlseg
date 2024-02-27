@@ -102,6 +102,7 @@ class ZeroShotDataset(Dataset):
             "mask": mask,
             "mask_shape": np.array(mask_shape),
             "mask_name": mask_name,
+            "cache_name": mask_name,
             **text_inputs,
         }
 

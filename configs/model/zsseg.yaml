@@ -3,11 +3,8 @@ _target_: src.models.image_text_mask_module.ImageTextMaskModule
 net:
   _target_: src.models.core_models.zero_shot_ris.ZeroShotRIS
   clip_pretrained_path: ${model_pretrained_path}
-  clip_interpolation_mode: ${import_eval:torchvision.transforms.functional.InterpolationMode.BICUBIC}
   is_hf_model: ${is_hf_model}
-  alpha: 0.95
-  beta: 0.5
-  solo_state_dict_path: ${paths.pretrain_dir}/FreeSOLO_R101_30k.pt
+  clip_interpolation_mode: ${import_eval:torchvision.transforms.functional.InterpolationMode.BICUBIC}
   solo_config:
     MODEL:
       ANCHOR_GENERATOR:
@@ -189,7 +186,16 @@ net:
         USE_COORD_CONV: True
         USE_DCN_IN_INSTANCE: False
       WEIGHTS: checkpoints/FreeSOLO_R101_30k_pl.pth
-
+  solo_state_dict_path: ${paths.pretrain_dir}/FreeSOLO_R101_30k.pt
+  cache_dir: ${cache_dir}
+  cache_object_glob: "*.npz"
+  threshold_solo_mask: False
+  masking_block_idx: -3
+  alpha: 0.95
+  beta: 0.5
+  num_masks: 1
+  return_similarity: False
+  force_no_load_models: False
 loss_fn:
   _target_: monai.losses.DiceCELoss
   lambda_ce: 0.25
@@ -215,3 +221,4 @@ compile: false
 task: binary
 threshold: 0.5
 activation_fn: null
+cache_outputs: True

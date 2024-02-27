@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
+import numpy as np
 import torch
 from torch import nn
 from torchvision.transforms import functional as TF
@@ -11,6 +13,8 @@ from .freesolo import CustomFreeSOLO
 from .hfclip import CustomHFCLIP
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from torch.serialization import FILE_LIKE
 
     from .baseclip import BaseCLIP
@@ -26,39 +30,55 @@ class ZeroShotRIS(nn.Module):
         clip_interpolation_mode: InterpolationModeConvertible,
         solo_config: object,
         solo_state_dict_path: FILE_LIKE,
+        cache_dir: Path | str,
+        cache_object_glob: str = "*.npz",
+        threshold_solo_mask: bool = True,
         masking_block_idx: int | None = -3,
         alpha: float = 0.95,
         beta: float = 0.5,
+        num_masks: int = 1,
+        return_similarity: bool = False,
+        force_no_load_models: bool = False,
         *clip_args,
         **clip_kwargs,
     ) -> None:
-        super().__init__()
+        if num_masks < 1:
+            msg = "The number of masks to be returned should be >= 1."
+            raise ValueError(msg)
 
-        self.clip: BaseCLIP = (
-            CustomHFCLIP(clip_pretrained_path, *clip_args, **clip_kwargs)
-            if is_hf_model
-            else CustomOpenCLIP(clip_pretrained_path, *clip_args, **clip_kwargs)
-        )
+        # Create cache directory and its parents if not already created
+        cache_dir = Path(cache_dir)
+        cache_dir.mkdir(parents=True, exist_ok=True)
+
+        super().__init__()
 
         self.clip_interpolation_mode = self.get_torchvision_interpolation_mode(
             clip_interpolation_mode,
         )
 
-        self.freesolo = CustomFreeSOLO(solo_config, solo_state_dict_path)
+        if not force_no_load_models:
+            self.clip: BaseCLIP = (
+                CustomHFCLIP(clip_pretrained_path, *clip_args, **clip_kwargs)
+                if is_hf_model
+                else CustomOpenCLIP(clip_pretrained_path, *clip_args, **clip_kwargs)
+            )
 
+            self.freesolo = CustomFreeSOLO(
+                solo_config,
+                solo_state_dict_path,
+                threshold_solo_mask,
+            )
+
+        self.cache_prefix = clip_pretrained_path.replace("/", "_")
+
+        self.cache_dir = cache_dir
+        self.existing_cached_files = set(cache_dir.glob(cache_object_glob))
         self.masking_block_idx = masking_block_idx
         self.alpha = alpha
         self.beta = beta
 
-        # Get model's output only when its weight is non-zero
-        self.get_mask_features = (
-            self._get_mask_features if alpha != 0 else nn.Identity()
-        )
-
-        # Get model's output only when its weight is non-zero
-        self.get_cropped_features = (
-            self._get_cropped_features if alpha != 1 else nn.Identity()
-        )
+        self.num_masks = num_masks
+        self.return_similarity = return_similarity
 
     @staticmethod
     def get_torchvision_interpolation_mode(mode) -> TF.InterpolationMode:
@@ -78,7 +98,7 @@ class ZeroShotRIS(nn.Module):
         self,
         image_input: torch.Tensor,
         pred_boxes: torch.IntTensor,
-        pred_masks: torch.BoolTensor,
+        pred_masks: torch.FloatTensor,
     ):
         # Fill the image outside of the mask but inside the bounding box with
         # the following pixel_mean
@@ -95,7 +115,7 @@ class ZeroShotRIS(nn.Module):
         channeled_pred_mask = pred_masks.unsqueeze(1)
         # image_input: (3, H, W)
         masked_images = (
-            image_input * channeled_pred_mask + ~channeled_pred_mask * pixel_mean
+            image_input * channeled_pred_mask + (1 - channeled_pred_mask) * pixel_mean
         )
 
         clip_image_size = self.clip.image_size
@@ -118,24 +138,48 @@ class ZeroShotRIS(nn.Module):
 
         return torch.stack(cropped_imgs)
 
-    def _get_cropped_features(
+    def get_cropped_features(
         self,
         image_input: torch.Tensor,
         pred_boxes: torch.IntTensor,
-        pred_masks: torch.BoolTensor,
+        pred_masks: torch.FloatTensor,
     ):
         # Separated in a different function to invoke gc faster
         cropped_tensor = self.get_cropped_tensor(image_input, pred_boxes, pred_masks)
 
         return self.clip.get_image_features(cropped_tensor)
 
-    def get_text_ensemble(self, text_input: dict[str, torch.Tensor]):
-        batched_text_features = self.clip.get_text_features(
-            text_input["input_ids"][0],
-            text_input["attention_mask"][0],
+    def get_text_ensemble(
+        self,
+        text_input: dict[str, torch.Tensor],
+        current_base_cache_filename: Path,
+        image_like_kwargs: Mapping[str, Any],
+    ):
+        textual_feature_cache_filename = current_base_cache_filename.with_stem(
+            f"{current_base_cache_filename.stem}_{self.cache_prefix}_textual_feature",
         )
 
-        phrase_features, class_features = batched_text_features
+        if textual_feature_cache_filename in self.existing_cached_files:
+            data = np.load(textual_feature_cache_filename)
+            np_phrase_features = data["phrase_features"]
+
+            phrase_features = torch.as_tensor(np_phrase_features, **image_like_kwargs)  # type:ignore
+
+            np_class_features = data["class_features"]
+            class_features = torch.as_tensor(np_class_features, **image_like_kwargs)  # type:ignore
+        else:
+            batched_text_features = self.clip.get_text_features(
+                input_ids=text_input["input_ids"][0],
+                attention_mask=text_input["attention_mask"][0],
+            )
+
+            phrase_features, class_features = batched_text_features
+
+            np.savez_compressed(
+                textual_feature_cache_filename,
+                phrase_features=phrase_features.cpu().numpy(),
+                class_features=class_features.cpu().numpy(),
+            )
 
         return self.beta * phrase_features + (1 - self.beta) * class_features
 
@@ -147,12 +191,22 @@ class ZeroShotRIS(nn.Module):
         # cosine similarity as logits
         logits_per_image = torch.matmul(image_embeds, text_embeds.t())
 
-        return logits_per_image.argmax()
+        if self.num_masks == 1:
+            max_sim, max_idx = logits_per_image.max(dim=-1)
+            if not self.return_similarity:
+                return max_idx
+            return max_idx, max_sim
 
-    def _get_mask_features(
+        topk_sim, topk_idx = logits_per_image.topk(self.num_masks)
+
+        if not self.return_similarity:
+            return topk_idx
+        return topk_idx, topk_sim
+
+    def get_mask_features(
         self,
         image_input: torch.Tensor,
-        pred_masks: torch.BoolTensor,
+        pred_masks: torch.FloatTensor,
     ):
         clip_image_size = self.clip.image_size
 
@@ -163,19 +217,21 @@ class ZeroShotRIS(nn.Module):
             interpolation=self.clip_interpolation_mode,
         )
 
+        # Add batch dimension to the resized image
+        resized_image = resized_image.unsqueeze(0)
+
         patch_size = self.clip.patch_size
         mask_size = clip_image_size // patch_size
 
         # pred_masks: shape (B, H, W)
-        # convert mask to float first before bilinear interpolation
         resized_masks = TF.resize(
-            pred_masks.to(dtype=image_input.dtype),
+            pred_masks,
             size=[mask_size, mask_size],
             antialias=False,
         )
 
         return self.clip.get_image_features(
-            pixel_values=resized_image.unsqueeze(0),
+            pixel_values=resized_image,
             pred_masks=resized_masks,
             masking_block_idx=self.masking_block_idx,
         )
@@ -184,14 +240,95 @@ class ZeroShotRIS(nn.Module):
         self,
         image_input: torch.Tensor,
         pred_boxes: torch.IntTensor,
-        pred_masks: torch.BoolTensor,
+        pred_masks: torch.FloatTensor,
+        current_base_cache_filename: Path,
     ):
-        mask_features = self.get_mask_features(image_input, pred_masks)
-        crop_features = self.get_cropped_features(image_input, pred_boxes, pred_masks)
+        image_like_kwargs = {
+            "dtype": image_input.dtype,
+            "device": image_input.device,
+        }
+
+        visual_feature_cache_filename = current_base_cache_filename.with_stem(
+            f"{current_base_cache_filename.stem}_{self.cache_prefix}_visual_feature",
+        )
+
+        if visual_feature_cache_filename in self.existing_cached_files:
+            data = np.load(visual_feature_cache_filename)
+            np_mask_features = data["mask_features"]
+            mask_features = torch.as_tensor(np_mask_features, **image_like_kwargs)  # type:ignore
+
+            np_crop_features = data["boxes"]
+            crop_features = torch.as_tensor(np_crop_features, **image_like_kwargs)  # type:ignore
+        else:
+            zero_tensor = torch.zeros(1, **image_like_kwargs)
+            mask_features = (
+                self.get_mask_features(image_input, pred_masks)
+                if self.alpha != 0
+                else zero_tensor
+            )
+            crop_features = (
+                self.get_cropped_features(image_input, pred_boxes, pred_masks)
+                if self.alpha != 1
+                else zero_tensor
+            )
+
+            np.savez_compressed(
+                visual_feature_cache_filename,
+                mask_features=mask_features.cpu().numpy(),
+                crop_features=crop_features.cpu().numpy(),
+            )
 
         return self.alpha * mask_features + (1 - self.alpha) * crop_features
 
-    def forward(self, image_input: torch.Tensor, text_input: dict[str, torch.Tensor]):
+    def get_freesolo_predictions(
+        self,
+        current_base_cache_filename: Path,
+        image_input: torch.Tensor,
+    ):
+        image_like_kwargs = {
+            "dtype": image_input.dtype,
+            "device": image_input.device,
+        }
+
+        freesolo_cache_filename = current_base_cache_filename.with_stem(
+            f"{current_base_cache_filename.stem}_freesolo",
+        )
+
+        if freesolo_cache_filename in self.existing_cached_files:
+            data = np.load(freesolo_cache_filename)
+            np_masks = data["masks"]
+
+            if len(np_masks) == 0:
+                return None
+
+            np_boxes = data["boxes"]
+
+            pred_masks = torch.as_tensor(np_masks, **image_like_kwargs)  # type:ignore
+
+            pred_boxes: torch.IntTensor = torch.as_tensor(np_boxes, dtype=torch.int16)  # type:ignore
+        else:
+            # Get boxes from the output
+            pred_masks: torch.FloatTensor
+            pred_boxes_raw, pred_masks = self.freesolo(image_input)
+
+            if len(pred_masks) == 0:
+                print("No pred masks given. No image features are returned.")
+
+                np.savez_compressed(freesolo_cache_filename, masks=[])
+
+                return None
+
+            # Convert to integer type and move to cpu
+            pred_boxes = pred_boxes_raw.tensor.to(dtype=torch.int16, device="cpu")
+
+            np.savez_compressed(
+                freesolo_cache_filename,
+                boxes=pred_boxes.numpy(),
+                masks=pred_masks.cpu().numpy(),
+            )
+        return pred_boxes, pred_masks
+
+    def forward(self, image_input: torch.Tensor, text_input: dict[str, Any]):
         """Steps to implement:
 
         1. image = Load an image in the original size (without normalization).
@@ -206,26 +343,51 @@ class ZeroShotRIS(nn.Module):
                 print("The image input should be of a single batch size.")
             image_input = image_input[0]
 
-        # Get boxes from the output
-        pred_boxes, pred_masks = self.freesolo(image_input)
+        # contains extension
+        cache_name: str = text_input["cache_name"]
+        current_base_cache_filename = (self.cache_dir / cache_name).with_suffix(".npz")
 
-        if len(pred_masks) == 0:
-            print("No pred masks given. No image features are returned.")
+        image_like_kwargs = {
+            "dtype": image_input.dtype,
+            "device": image_input.device,
+        }
+
+        freesolo_predictions = self.get_freesolo_predictions(
+            current_base_cache_filename,
+            image_input,
+        )
+
+        if freesolo_predictions is None:
+            print("No pred masks could be extracted from the image.")
             return torch.zeros(
-                (1, *image_input.shape[1:]),
-                dtype=image_input.dtype,
-                device=image_input.device,
+                (1, 1, *image_input.shape[1:]),
+                **image_like_kwargs,
             )
 
-        # Convert to integer type and move to cpu
-        pred_boxes = pred_boxes.tensor.to(dtype=torch.int, device="cpu")
+        pred_boxes, pred_masks = freesolo_predictions
 
-        visual_feature = self.get_visual_feature(image_input, pred_boxes, pred_masks)
+        visual_feature = self.get_visual_feature(
+            image_input,
+            pred_boxes,
+            pred_masks,
+            current_base_cache_filename,
+        )
 
-        text_ensemble = self.get_text_ensemble(text_input)
+        text_ensemble = self.get_text_ensemble(
+            text_input,
+            current_base_cache_filename,
+            image_like_kwargs,
+        )
 
-        max_index = self.get_max_index(text_ensemble, visual_feature)
+        max_output = self.get_max_index(text_ensemble, visual_feature)
 
-        selected_mask: torch.BoolTensor = pred_masks[max_index]
+        H, W = pred_masks.shape[1:]
+        resulting_mask_size = (-1, 1, H, W)
 
-        return selected_mask[None, None, ...].float()
+        # If not returning similarity
+        if not isinstance(max_output, tuple):
+            return pred_masks[max_output].reshape(resulting_mask_size)
+
+        indices, values = max_output
+
+        return pred_masks[indices].reshape(resulting_mask_size), values
