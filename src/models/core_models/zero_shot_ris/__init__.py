@@ -257,9 +257,11 @@ class ZeroShotRIS(nn.Module):
             np_mask_features = data["mask_features"]
             mask_features = torch.as_tensor(np_mask_features, **image_like_kwargs)  # type:ignore
 
-            np_crop_features = data["boxes"]
+            np_crop_features = data["crop_features"]
             crop_features = torch.as_tensor(np_crop_features, **image_like_kwargs)  # type:ignore
         else:
+            pred_masks = pred_masks.to(dtype=image_like_kwargs["dtype"])
+
             zero_tensor = torch.zeros(1, **image_like_kwargs)
             mask_features = (
                 self.get_mask_features(image_input, pred_masks)
@@ -344,7 +346,7 @@ class ZeroShotRIS(nn.Module):
             image_input = image_input[0]
 
         # contains extension
-        cache_name: str = text_input["cache_name"]
+        cache_name: str = text_input["cache_name"][0]
         current_base_cache_filename = (self.cache_dir / cache_name).with_suffix(".npz")
 
         image_like_kwargs = {
@@ -386,8 +388,14 @@ class ZeroShotRIS(nn.Module):
 
         # If not returning similarity
         if not isinstance(max_output, tuple):
-            return pred_masks[max_output].reshape(resulting_mask_size)
+            return (
+                pred_masks[max_output]
+                .reshape(resulting_mask_size)
+                .to(dtype=image_like_kwargs["dtype"])
+            )
 
         indices, values = max_output
 
-        return pred_masks[indices].reshape(resulting_mask_size), values
+        return pred_masks[indices].reshape(resulting_mask_size).to(
+            dtype=image_like_kwargs["dtype"]
+        ), values
