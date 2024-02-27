@@ -30,12 +30,14 @@ class ZeroShotRIS(nn.Module):
         clip_interpolation_mode: InterpolationModeConvertible,
         solo_config: object,
         solo_state_dict_path: FILE_LIKE,
-        cache_dir: Path | str,
-        cache_object_glob: str = "*.npz",
         threshold_solo_mask: bool = True,
         masking_block_idx: int | None = -3,
         alpha: float = 0.95,
         beta: float = 0.5,
+        cache_dir: Path | str | None = None,
+        read_cache: bool = False,
+        write_cache: bool = False,
+        cache_object_glob: str = "*.npz",
         num_masks: int = 1,
         return_similarity: bool = False,
         force_no_load_models: bool = False,
@@ -46,9 +48,9 @@ class ZeroShotRIS(nn.Module):
             msg = "The number of masks to be returned should be >= 1."
             raise ValueError(msg)
 
-        # Create cache directory and its parents if not already created
-        cache_dir = Path(cache_dir)
-        cache_dir.mkdir(parents=True, exist_ok=True)
+        if cache_dir is None and (read_cache or write_cache):
+            msg = "Cache directory must be specified if caching is enabled."
+            raise ValueError(msg)
 
         super().__init__()
 
@@ -71,8 +73,20 @@ class ZeroShotRIS(nn.Module):
 
         self.cache_prefix = clip_pretrained_path.replace("/", "_")
 
-        self.cache_dir = cache_dir
-        self.existing_cached_files = set(cache_dir.glob(cache_object_glob))
+        if cache_dir is None:
+            self.cache_dir = None
+        else:
+            # Create cache directory and its parents if not already created
+            cache_dir = Path(cache_dir)
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            self.cache_dir = cache_dir
+
+            if read_cache:
+                self.existing_cached_files = set(cache_dir.glob(cache_object_glob))
+
+        self.read_cache = read_cache
+        self.write_cache = write_cache
+
         self.masking_block_idx = masking_block_idx
         self.alpha = alpha
         self.beta = beta
@@ -152,14 +166,18 @@ class ZeroShotRIS(nn.Module):
     def get_text_ensemble(
         self,
         text_input: dict[str, torch.Tensor],
-        current_base_cache_filename: Path,
+        current_base_cache_filename: Path | None,
         image_like_kwargs: Mapping[str, Any],
     ):
-        textual_feature_cache_filename = current_base_cache_filename.with_stem(
-            f"{current_base_cache_filename.stem}_{self.cache_prefix}_textual_feature",
+        textual_feature_cache_filename = self.get_cache_path(
+            current_base_cache_filename, "textual_feature"
         )
 
-        if textual_feature_cache_filename in self.existing_cached_files:
+        if (
+            textual_feature_cache_filename is not None
+            and self.read_cache
+            and textual_feature_cache_filename in self.existing_cached_files
+        ):
             data = np.load(textual_feature_cache_filename)
             np_phrase_features = data["phrase_features"]
 
@@ -175,11 +193,12 @@ class ZeroShotRIS(nn.Module):
 
             phrase_features, class_features = batched_text_features
 
-            np.savez_compressed(
-                textual_feature_cache_filename,
-                phrase_features=phrase_features.cpu().numpy(),
-                class_features=class_features.cpu().numpy(),
-            )
+            if textual_feature_cache_filename is not None and self.write_cache:
+                np.savez_compressed(
+                    textual_feature_cache_filename,
+                    phrase_features=phrase_features.cpu().numpy(),
+                    class_features=class_features.cpu().numpy(),
+                )
 
         return self.beta * phrase_features + (1 - self.beta) * class_features
 
@@ -241,18 +260,22 @@ class ZeroShotRIS(nn.Module):
         image_input: torch.Tensor,
         pred_boxes: torch.IntTensor,
         pred_masks: torch.FloatTensor,
-        current_base_cache_filename: Path,
+        current_base_cache_filename: Path | None,
     ):
         image_like_kwargs = {
             "dtype": image_input.dtype,
             "device": image_input.device,
         }
 
-        visual_feature_cache_filename = current_base_cache_filename.with_stem(
-            f"{current_base_cache_filename.stem}_{self.cache_prefix}_visual_feature",
+        visual_feature_cache_filename = self.get_cache_path(
+            current_base_cache_filename, "visual_feature"
         )
 
-        if visual_feature_cache_filename in self.existing_cached_files:
+        if (
+            visual_feature_cache_filename is not None
+            and self.read_cache
+            and visual_feature_cache_filename in self.existing_cached_files
+        ):
             data = np.load(visual_feature_cache_filename)
             np_mask_features = data["mask_features"]
             mask_features = torch.as_tensor(np_mask_features, **image_like_kwargs)  # type:ignore
@@ -260,7 +283,7 @@ class ZeroShotRIS(nn.Module):
             np_crop_features = data["crop_features"]
             crop_features = torch.as_tensor(np_crop_features, **image_like_kwargs)  # type:ignore
         else:
-            pred_masks = pred_masks.to(dtype=image_like_kwargs["dtype"])
+            pred_masks = pred_masks.to(dtype=image_like_kwargs["dtype"])  # type:ignore
 
             zero_tensor = torch.zeros(1, **image_like_kwargs)
             mask_features = (
@@ -274,17 +297,26 @@ class ZeroShotRIS(nn.Module):
                 else zero_tensor
             )
 
-            np.savez_compressed(
-                visual_feature_cache_filename,
-                mask_features=mask_features.cpu().numpy(),
-                crop_features=crop_features.cpu().numpy(),
-            )
+            if visual_feature_cache_filename is not None and self.write_cache:
+                np.savez_compressed(
+                    visual_feature_cache_filename,
+                    mask_features=mask_features.cpu().numpy(),
+                    crop_features=crop_features.cpu().numpy(),
+                )
 
         return self.alpha * mask_features + (1 - self.alpha) * crop_features
 
+    @staticmethod
+    def get_cache_path(current_base_cache_filename: Path | None, stem_postfix: str):
+        if current_base_cache_filename is None:
+            return None
+        return current_base_cache_filename.with_stem(
+            f"{current_base_cache_filename.stem}_{stem_postfix}"
+        )
+
     def get_freesolo_predictions(
         self,
-        current_base_cache_filename: Path,
+        current_base_cache_filename: Path | None,
         image_input: torch.Tensor,
     ):
         image_like_kwargs = {
@@ -292,11 +324,15 @@ class ZeroShotRIS(nn.Module):
             "device": image_input.device,
         }
 
-        freesolo_cache_filename = current_base_cache_filename.with_stem(
-            f"{current_base_cache_filename.stem}_freesolo",
+        freesolo_cache_filename = self.get_cache_path(
+            current_base_cache_filename, "freesolo"
         )
 
-        if freesolo_cache_filename in self.existing_cached_files:
+        if (
+            freesolo_cache_filename is not None
+            and self.read_cache
+            and freesolo_cache_filename in self.existing_cached_files
+        ):
             data = np.load(freesolo_cache_filename)
             np_masks = data["masks"]
 
@@ -316,18 +352,21 @@ class ZeroShotRIS(nn.Module):
             if len(pred_masks) == 0:
                 print("No pred masks given. No image features are returned.")
 
-                np.savez_compressed(freesolo_cache_filename, masks=[])
+                if freesolo_cache_filename is not None and self.write_cache:
+                    np.savez_compressed(freesolo_cache_filename, masks=[])
 
                 return None
 
             # Convert to integer type and move to cpu
             pred_boxes = pred_boxes_raw.tensor.to(dtype=torch.int16, device="cpu")
 
-            np.savez_compressed(
-                freesolo_cache_filename,
-                boxes=pred_boxes.numpy(),
-                masks=pred_masks.cpu().numpy(),
-            )
+            if freesolo_cache_filename is not None and self.write_cache:
+                np.savez_compressed(
+                    freesolo_cache_filename,
+                    boxes=pred_boxes.numpy(),
+                    masks=pred_masks.cpu().numpy(),
+                )
+
         return pred_boxes, pred_masks
 
     def forward(self, image_input: torch.Tensor, text_input: dict[str, Any]):
@@ -345,9 +384,14 @@ class ZeroShotRIS(nn.Module):
                 print("The image input should be of a single batch size.")
             image_input = image_input[0]
 
-        # contains extension
-        cache_name: str = text_input["cache_name"][0]
-        current_base_cache_filename = (self.cache_dir / cache_name).with_suffix(".npz")
+        if self.cache_dir is None:
+            current_base_cache_filename = None
+        else:
+            # contains extension
+            cache_name: str = text_input["cache_name"][0]
+            current_base_cache_filename = (self.cache_dir / cache_name).with_suffix(
+                ".npz"
+            )
 
         image_like_kwargs = {
             "dtype": image_input.dtype,
