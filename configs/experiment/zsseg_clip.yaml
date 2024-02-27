@@ -41,10 +41,10 @@ data:
 
 logger:
   wandb:
-    project: Zero Shot Segmentation
+    project: Medical Zero Shot Segmentation
     name: ${exp_name}
     tags: ${tags}
-    group: "medical"
+    group: "clip"
   aim:
     experiment: "medical"
 
@@ -60,12 +60,14 @@ model_pretrained_path: openai/clip-vit-base-patch32
 is_hf_model: true
 tokenizer_pretrained_path: ${model_pretrained_path}
 
-exp_name: "model_${model_pretrained_path}_tokenizer_{tokenizer_pretrained_path}"
+exp_name: "model_${model_pretrained_path}_tokenizer_${tokenizer_pretrained_path}"
 
 img_mean: [0.48145466, 0.4578275, 0.40821073]
 img_std: [0.26862954, 0.26130258, 0.27577711]
 
 prompt_type: p6
+
+predict: false
 
 # Image pre-processing configs
 
