@@ -27,7 +27,6 @@ class ZeroShotRIS(nn.Module):
         self,
         clip_pretrained_path: str,
         is_hf_model: bool,
-        clip_normalizer: Callable[[torch.Tensor], torch.Tensor],
         clip_interpolation_mode: InterpolationModeConvertible,
         solo_config: object,
         solo_state_dict_path: FILE_LIKE,
@@ -79,8 +78,6 @@ class ZeroShotRIS(nn.Module):
 
             if read_cache:
                 self.existing_cached_files = set(cache_dir.glob(cache_object_glob))
-
-        self.clip_normalizer = clip_normalizer
 
         self.read_cache = read_cache
         self.write_cache = write_cache
@@ -309,12 +306,11 @@ class ZeroShotRIS(nn.Module):
                 crop_features = torch.as_tensor(np_crop_features, **image_like_kwargs)  # type:ignore
 
         else:
-            norm_image = self.clip_normalizer(image_input)
             if visual_feature_cache_filename is not None and self.write_cache:
                 # Need to calculate both features if writing to cache
-                mask_features = self.get_mask_features(norm_image, pred_masks)
+                mask_features = self.get_mask_features(image_input, pred_masks)
                 crop_features = self.get_cropped_features(
-                    norm_image,
+                    image_input,
                     pred_boxes,
                     pred_masks,
                 )
@@ -327,12 +323,12 @@ class ZeroShotRIS(nn.Module):
             else:
                 zero_tensor = torch.zeros(1, **image_like_kwargs)
                 mask_features = (
-                    self.get_mask_features(norm_image, pred_masks)
+                    self.get_mask_features(image_input, pred_masks)
                     if self.alpha != 0
                     else zero_tensor
                 )
                 crop_features = (
-                    self.get_cropped_features(norm_image, pred_boxes, pred_masks)
+                    self.get_cropped_features(image_input, pred_boxes, pred_masks)
                     if self.alpha != 1
                     else zero_tensor
                 )

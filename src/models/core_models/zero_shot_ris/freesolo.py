@@ -22,14 +22,6 @@ class CustomFreeSOLO(nn.Module):
         super().__init__()
         self.model = self.load_model(solo_config, solo_state_dict_path, *args, **kwargs)
 
-        self.get_normalizer = self.get_normalizer(solo_config, normalizer_inplace)
-
-    @staticmethod
-    def get_normalizer(solo_config: Any, inplace: bool):
-        norm_pixel_mean = np.array(solo_config.MODEL.PIXEL_MEAN) / 255
-        norm_pixel_std = np.array(solo_config.MODEL.PIXEL_STD) / 255
-        return Normalize(norm_pixel_mean, norm_pixel_std, inplace=inplace)
-
     @staticmethod
     def load_model(
         solo_config: object,
@@ -48,14 +40,12 @@ class CustomFreeSOLO(nn.Module):
         return solo
 
     def forward(self, image_input: torch.Tensor) -> tuple[Boxes, torch.BoolTensor]:
-        norm_image = self.normalizer(image_input)
-
-        image_height = norm_image.size(1)
-        image_width = norm_image.size(2)
+        image_height = image_input.size(1)
+        image_width = image_input.size(2)
 
         batched_images = [
             {
-                "image": norm_image,
+                "image": image_input,
                 "height": image_height,
                 "width": image_width,
             },
