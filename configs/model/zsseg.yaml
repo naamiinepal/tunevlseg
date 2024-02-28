@@ -187,7 +187,6 @@ net:
         USE_DCN_IN_INSTANCE: False
       WEIGHTS: checkpoints/FreeSOLO_R101_30k_pl.pth
   solo_state_dict_path: ${paths.pretrain_dir}/FreeSOLO_R101_30k.pt
-  threshold_solo_mask: False
   masking_block_idx: -3
   alpha: 0.95
   beta: 0.5

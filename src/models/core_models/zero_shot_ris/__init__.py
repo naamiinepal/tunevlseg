@@ -30,7 +30,6 @@ class ZeroShotRIS(nn.Module):
         clip_interpolation_mode: InterpolationModeConvertible,
         solo_config: object,
         solo_state_dict_path: FILE_LIKE,
-        threshold_solo_mask: bool = True,
         masking_block_idx: int | None = -3,
         alpha: float = 0.95,
         beta: float = 0.5,
@@ -65,11 +64,7 @@ class ZeroShotRIS(nn.Module):
                 else CustomOpenCLIP(clip_pretrained_path, *clip_args, **clip_kwargs)
             )
 
-            self.freesolo = CustomFreeSOLO(
-                solo_config,
-                solo_state_dict_path,
-                threshold_solo_mask,
-            )
+            self.freesolo = CustomFreeSOLO(solo_config, solo_state_dict_path)
 
         self.cache_prefix = clip_pretrained_path.replace("/", "_")
 
@@ -112,7 +107,7 @@ class ZeroShotRIS(nn.Module):
         self,
         image_input: torch.Tensor,
         pred_boxes: torch.IntTensor,
-        pred_masks: torch.FloatTensor,
+        pred_masks: torch.BoolTensor,
     ):
         # Fill the image outside of the mask but inside the bounding box with
         # the following pixel_mean
@@ -129,7 +124,7 @@ class ZeroShotRIS(nn.Module):
         channeled_pred_mask = pred_masks.unsqueeze(1)
         # image_input: (3, H, W)
         masked_images = (
-            image_input * channeled_pred_mask + (1 - channeled_pred_mask) * pixel_mean
+            image_input * channeled_pred_mask + ~channeled_pred_mask * pixel_mean
         )
 
         clip_image_size = self.clip.image_size
@@ -156,7 +151,7 @@ class ZeroShotRIS(nn.Module):
         self,
         image_input: torch.Tensor,
         pred_boxes: torch.IntTensor,
-        pred_masks: torch.FloatTensor,
+        pred_masks: torch.BoolTensor,
     ):
         # Separated in a different function to invoke gc faster
         cropped_tensor = self.get_cropped_tensor(image_input, pred_boxes, pred_masks)
@@ -225,7 +220,7 @@ class ZeroShotRIS(nn.Module):
     def get_mask_features(
         self,
         image_input: torch.Tensor,
-        pred_masks: torch.FloatTensor,
+        pred_masks: torch.BoolTensor,
     ):
         clip_image_size = self.clip.image_size
 
@@ -246,6 +241,7 @@ class ZeroShotRIS(nn.Module):
         resized_masks = TF.resize(
             pred_masks,
             size=[mask_size, mask_size],
+            interpolation=TF.InterpolationMode.NEAREST_EXACT,
             antialias=False,
         )
 
@@ -259,7 +255,7 @@ class ZeroShotRIS(nn.Module):
         self,
         image_input: torch.Tensor,
         pred_boxes: torch.IntTensor,
-        pred_masks: torch.FloatTensor,
+        pred_masks: torch.BoolTensor,
         current_base_cache_filename: Path | None,
     ):
         image_like_kwargs = {
@@ -341,12 +337,12 @@ class ZeroShotRIS(nn.Module):
 
             np_boxes = data["boxes"]
 
-            pred_masks = torch.as_tensor(np_masks, **image_like_kwargs)  # type:ignore
+            pred_masks = torch.as_tensor(np_masks, device=image_like_kwargs["device"])  # type:ignore
 
             pred_boxes: torch.IntTensor = torch.as_tensor(np_boxes, dtype=torch.int16)  # type:ignore
         else:
             # Get boxes from the output
-            pred_masks: torch.FloatTensor
+            pred_masks: torch.BoolTensor
             pred_boxes_raw, pred_masks = self.freesolo(image_input)
 
             if len(pred_masks) == 0:
