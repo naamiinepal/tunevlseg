@@ -174,12 +174,25 @@ class ZeroShotRIS(nn.Module):
             and textual_feature_cache_filename in self.existing_cached_files
         ):
             data = np.load(textual_feature_cache_filename)
-            np_phrase_features = data["phrase_features"]
 
-            phrase_features = torch.as_tensor(np_phrase_features, **image_like_kwargs)  # type:ignore
+            zero_tensor = torch.zeros(1, **image_like_kwargs)
 
-            np_class_features = data["class_features"]
-            class_features = torch.as_tensor(np_class_features, **image_like_kwargs)  # type:ignore
+            # Load numpy only if needed
+            if self.beta == 0:
+                phrase_features = zero_tensor
+            else:
+                np_phrase_features = data["phrase_features"]
+
+                phrase_features = torch.as_tensor(
+                    np_phrase_features, **image_like_kwargs
+                )  # type:ignore
+
+            # Load numpy only if needed
+            if self.beta == 1:
+                class_features = zero_tensor
+            else:
+                np_class_features = data["class_features"]
+                class_features = torch.as_tensor(np_class_features, **image_like_kwargs)  # type:ignore
         else:
             batched_text_features = self.clip.get_text_features(
                 input_ids=text_input["input_ids"][0],
@@ -273,11 +286,22 @@ class ZeroShotRIS(nn.Module):
             and visual_feature_cache_filename in self.existing_cached_files
         ):
             data = np.load(visual_feature_cache_filename)
-            np_mask_features = data["mask_features"]
-            mask_features = torch.as_tensor(np_mask_features, **image_like_kwargs)  # type:ignore
+            zero_tensor = torch.zeros(1, **image_like_kwargs)
 
-            np_crop_features = data["crop_features"]
-            crop_features = torch.as_tensor(np_crop_features, **image_like_kwargs)  # type:ignore
+            # Load numpy only if needed
+            if self.alpha == 0:
+                mask_features = zero_tensor
+            else:
+                np_mask_features = data["mask_features"]
+                mask_features = torch.as_tensor(np_mask_features, **image_like_kwargs)  # type:ignore
+
+            # Load numpy only if needed
+            if self.alpha == 1:
+                crop_features = zero_tensor
+            else:
+                np_crop_features = data["crop_features"]
+                crop_features = torch.as_tensor(np_crop_features, **image_like_kwargs)  # type:ignore
+
         elif visual_feature_cache_filename is not None and self.write_cache:
             # Need to calculate both features if writing to cache
             mask_features = self.get_mask_features(image_input, pred_masks)
