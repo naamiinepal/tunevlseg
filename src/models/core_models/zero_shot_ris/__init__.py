@@ -165,7 +165,7 @@ class ZeroShotRIS(nn.Module):
         image_like_kwargs: Mapping[str, Any],
     ):
         textual_feature_cache_filename = self.get_cache_path(
-            current_base_cache_filename, "textual_feature"
+            current_base_cache_filename, f"{self.cache_prefix}_textual_feature"
         )
 
         if (
@@ -264,7 +264,7 @@ class ZeroShotRIS(nn.Module):
         }
 
         visual_feature_cache_filename = self.get_cache_path(
-            current_base_cache_filename, "visual_feature"
+            current_base_cache_filename, f"{self.cache_prefix}_visual_feature"
         )
 
         if (
@@ -278,9 +278,19 @@ class ZeroShotRIS(nn.Module):
 
             np_crop_features = data["crop_features"]
             crop_features = torch.as_tensor(np_crop_features, **image_like_kwargs)  # type:ignore
-        else:
-            pred_masks = pred_masks.to(dtype=image_like_kwargs["dtype"])  # type:ignore
+        elif visual_feature_cache_filename is not None and self.write_cache:
+            # Need to calculate both features if writing to cache
+            mask_features = self.get_mask_features(image_input, pred_masks)
+            crop_features = self.get_cropped_features(
+                image_input, pred_boxes, pred_masks
+            )
 
+            np.savez_compressed(
+                visual_feature_cache_filename,
+                mask_features=mask_features.cpu().numpy(),
+                crop_features=crop_features.cpu().numpy(),
+            )
+        else:
             zero_tensor = torch.zeros(1, **image_like_kwargs)
             mask_features = (
                 self.get_mask_features(image_input, pred_masks)
@@ -292,13 +302,6 @@ class ZeroShotRIS(nn.Module):
                 if self.alpha != 1
                 else zero_tensor
             )
-
-            if visual_feature_cache_filename is not None and self.write_cache:
-                np.savez_compressed(
-                    visual_feature_cache_filename,
-                    mask_features=mask_features.cpu().numpy(),
-                    crop_features=crop_features.cpu().numpy(),
-                )
 
         return self.alpha * mask_features + (1 - self.alpha) * crop_features
 
