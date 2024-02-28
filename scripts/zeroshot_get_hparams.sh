@@ -4,10 +4,6 @@ source .venv/bin/activate
 
 N=3
 for experiment in clip biomedclip; do
-	accelerator='auto'
-	devices='[0]'
-	force_no_load_models=false
-
 	for alpha in $(seq 0 0.05 1); do
 		for beta in $(seq 0 0.05 1); do
 
@@ -18,18 +14,19 @@ for experiment in clip biomedclip; do
 				ckpt_path=null disable_ckpt=true \
 				extras.print_config=false \
 				model.net.alpha=${alpha} model.net.beta=${beta} \
-				model.net.force_no_load_models=${force_no_load_models} \
-				model.net.threshold_solo_mask=true \
-				trainer.accelerator=${accelerator} trainer.devices=${devices} >/dev/null &
+				model.net.force_no_load_models=true \
+				model.net.read_cache=true model.net.write_cache=false \
+				data.num_workers=2 \
+				trainer.accelerator="cpu" >/dev/null &
+
+			# Sleep some time so that logs do not collide
+			sleep 1.5
 
 			# Check if there are 3 or more background jobs running or if accelerator is 'auto'
-			if [ $(jobs -r | wc -l) -ge $N ] || [ $accelerator == 'auto' ]; then
+			if [ $(jobs -r | wc -l) -ge $N ]; then
 				wait $(jobs -r -p | head -1) # Wait for the oldest background job
 			fi
 
-			accelerator='cpu'
-			devices='auto'
-			force_no_load_models=true
 		done
 	done
 done
