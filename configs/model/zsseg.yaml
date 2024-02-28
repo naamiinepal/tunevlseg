@@ -4,6 +4,7 @@ net:
   _target_: src.models.core_models.zero_shot_ris.ZeroShotRIS
   clip_pretrained_path: ${model_pretrained_path}
   is_hf_model: ${is_hf_model}
+  clip_normalizer: ${clip_normalizer}
   clip_interpolation_mode: ${import_eval:torchvision.transforms.functional.InterpolationMode.BICUBIC}
   solo_config:
     MODEL:

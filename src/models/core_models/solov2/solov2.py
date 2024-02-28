@@ -144,13 +144,13 @@ class SOLOv2(nn.Module):
         self.register_buffer("_iter", torch.zeros([1]))
 
         # image transform
-        pixel_mean = torch.tensor(cfg.MODEL.PIXEL_MEAN).view(
-            3,
-            1,
-            1,
-        )
-        pixel_std = torch.tensor(cfg.MODEL.PIXEL_STD).view(3, 1, 1)
-        self.normalizer = lambda x: (x - pixel_mean) / pixel_std
+        # pixel_mean = torch.tensor(cfg.MODEL.PIXEL_MEAN).view(
+        #     3,
+        #     1,
+        #     1,
+        # )
+        # pixel_std = torch.tensor(cfg.MODEL.PIXEL_STD).view(3, 1, 1)
+        # self.normalizer = lambda x: (x - pixel_mean) / pixel_std
 
     def preprocess_image(self, batched_inputs: Iterable[Mapping[str, torch.Tensor]]):
         """Normalize, pad and batch the input images."""

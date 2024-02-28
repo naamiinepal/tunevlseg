@@ -1,6 +1,10 @@
+from typing import Any
+
+import numpy as np
 import torch
 from torch import nn
 from torch.serialization import FILE_LIKE
+from torchvision.transforms import Normalize
 
 from ..detectron2.structures.boxes import Boxes
 from ..solov2 import PseudoSOLOv2
@@ -11,11 +15,20 @@ class CustomFreeSOLO(nn.Module):
         self,
         solo_config: object,
         solo_state_dict_path: FILE_LIKE,
+        normalizer_inplace: bool = False,
         *args,
         **kwargs,
     ) -> None:
         super().__init__()
         self.model = self.load_model(solo_config, solo_state_dict_path, *args, **kwargs)
+
+        self.get_normalizer = self.get_normalizer(solo_config, normalizer_inplace)
+
+    @staticmethod
+    def get_normalizer(solo_config: Any, inplace: bool):
+        norm_pixel_mean = np.array(solo_config.MODEL.PIXEL_MEAN) / 255
+        norm_pixel_std = np.array(solo_config.MODEL.PIXEL_STD) / 255
+        return Normalize(norm_pixel_mean, norm_pixel_std, inplace=inplace)
 
     @staticmethod
     def load_model(
@@ -35,12 +48,14 @@ class CustomFreeSOLO(nn.Module):
         return solo
 
     def forward(self, image_input: torch.Tensor) -> tuple[Boxes, torch.BoolTensor]:
-        image_height = image_input.size(1)
-        image_width = image_input.size(2)
+        norm_image = self.normalizer(image_input)
+
+        image_height = norm_image.size(1)
+        image_width = norm_image.size(2)
 
         batched_images = [
             {
-                "image": image_input,
+                "image": norm_image,
                 "height": image_height,
                 "width": image_width,
             },
