@@ -66,14 +66,16 @@ class ImageTextMaskModule(LightningModule):
         )
 
         # Dice Loggers
-        self.train_dice = Dice(threshold=threshold)
-        self.val_dice = Dice(threshold=threshold)
-        self.test_dice = Dice(threshold=threshold)
+        dice_kwargs = {"threshold": threshold, "average": "samples"}
+        self.train_dice = Dice(**dice_kwargs)
+        self.val_dice = Dice(**dice_kwargs)
+        self.test_dice = Dice(**dice_kwargs)
 
         # IoU Loggers
-        self.train_iou = JaccardIndex(task=task, threshold=threshold)
-        self.val_iou = JaccardIndex(task=task, threshold=threshold)
-        self.test_iou = JaccardIndex(task=task, threshold=threshold)
+        iou_kwargs = {"task": task, "threshold": threshold}
+        self.train_iou = JaccardIndex(**iou_kwargs)
+        self.val_iou = JaccardIndex(**iou_kwargs)
+        self.test_iou = JaccardIndex(**iou_kwargs)
 
         self.activation_fn = nn.Identity() if activation_fn is None else activation_fn
 
