@@ -8,10 +8,15 @@ from torch.nn import functional as F
 from transformers import AutoModel, CLIPModel, SiglipModel
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Callable, Mapping
     from os import PathLike
 
     from transformers.modeling_outputs import BaseModelOutputWithPooling
+    from transformers.models.siglip.modeling_siglip import (
+        SiglipMultiheadAttentionPoolingHead,
+    )
+
+    ProjectionLayerType = Callable[[torch.FloatTensor], torch.FloatTensor]
 
 
 class MultiModalEncoder(nn.Module):
@@ -49,10 +54,18 @@ class MultiModalEncoder(nn.Module):
         text_hidden_size = self.text_config.hidden_size
         image_hidden_size = self.vision_config.hidden_size
 
+        self.text_projection: ProjectionLayerType
+        self.visual_projection: ProjectionLayerType
         if use_existing_proj:
-            self.text_projection = self.model.text_projection
-            self.visual_projection = self.model.visual_projection
-            self.projection_dim: int = config.projection_dim
+            self.text_projection = getattr(
+                self.model, "text_projection", self.model.text_model.head
+            )
+            self.visual_projection = getattr(
+                self.model, "visual_projection", self._siglip_project_image
+            )
+            self.projection_dim: int = getattr(
+                config, "projection_dim", image_hidden_size
+            )
         else:
             # Make textual projection layer identity if hidden sizes match
             self.text_projection = (
@@ -73,7 +86,19 @@ class MultiModalEncoder(nn.Module):
         # Compute the gradient for the newly initialized projection layer
         # Even when model frozen, we still need to compute gradients for this layer
         if not use_existing_proj:
-            self.model.text_projection.requires_grad_(True)
+            self.text_projection.requires_grad_(True)
+
+    def _siglip_project_image(
+        self, hidden_state: torch.FloatTensor
+    ) -> torch.FloatTensor:
+        model: SiglipMultiheadAttentionPoolingHead = self.model.vision_model.head
+
+        batch_size = hidden_state.shape[0]
+        probe = model.probe.repeat(batch_size, 1, 1)
+
+        hidden_state = model.attention(probe, hidden_state, hidden_state)[0]
+
+        return hidden_state + model.mlp(model.layernorm(hidden_state))
 
     def get_text_features(self, *args, **kwargs) -> torch.FloatTensor:
         text_outputs: BaseModelOutputWithPooling = self.model.text_model(

@@ -293,7 +293,7 @@ class TransDecoder(nn.Module):
             return copy.deepcopy(norm)
 
         if norm == "layer":
-            return nn.LayerNorm(normalized_shape=num_channels, **decoder_kwargs)
+            return nn.LayerNorm(num_channels, **decoder_kwargs)
 
         if not isinstance(num_channels, int):
             msg = (
@@ -302,13 +302,14 @@ class TransDecoder(nn.Module):
             )
             raise ValueError(msg)
 
-        if norm == "group":
-            return nn.GroupNorm(num_channels=num_channels, **decoder_kwargs)
+        if norm == "instance":
+            return nn.InstanceNorm2d(num_channels, **decoder_kwargs)
 
         if norm == "batch":
             return nn.BatchNorm2d(num_channels, **decoder_kwargs)
 
+        if norm == "group":
+            return nn.GroupNorm(num_channels, **decoder_kwargs)
+
         msg = f"Norm type {norm} not implemented. Please pass as a module itself"
-        raise NotImplementedError(
-            msg,
-        )
+        raise NotImplementedError(msg)
