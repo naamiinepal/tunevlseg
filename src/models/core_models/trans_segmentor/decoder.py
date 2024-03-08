@@ -86,25 +86,25 @@ class TransDecoder(nn.Module):
             **kwargs,
         )
 
-        # Remove the pooled output
-        # shape: (B, N_i, H_i)
-        image_output = trans_output[:, 1:, :]
+        img_seq_len = trans_output.size(1)
+        sqrt_seq_len = math.isqrt(img_seq_len)
+
+        if (sqrt_seq_len * sqrt_seq_len) != img_seq_len:
+            # Remove the pooled output
+            # shape: (B, N_i, H_i)
+            trans_output = trans_output[:, 1:, :]
 
         # Move the hidden dimension to make it channel first
         # shape: (B, H_i, N_i)
-        channel_first_output = image_output.movedim(-1, 1)
+        channel_first_output = trans_output.movedim(-1, 1)
 
-        B, H, flat_size = channel_first_output.shape
-
-        hid_img_size = math.isqrt(flat_size)
-
-        if (hid_img_size * hid_img_size) != flat_size:
-            msg = "The number of tokens besides the pooled output should be a perfect square."
-            raise ValueError(msg)
+        hidden_dim = channel_first_output.size(1)
 
         # Make the output 4D
         # shape: (B, H_i, sqrt(N_i), sqrt(N_i))
-        img_channel_first = channel_first_output.view(B, H, hid_img_size, hid_img_size)
+        img_channel_first = channel_first_output.view(
+            -1, hidden_dim, sqrt_seq_len, sqrt_seq_len
+        )
 
         return self.upsampler(img_channel_first)
 
