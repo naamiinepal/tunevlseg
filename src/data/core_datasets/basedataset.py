@@ -9,7 +9,7 @@ import cv2
 import numpy as np
 from matplotlib import pyplot as plt
 from torch.utils.data import Dataset
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Mapping
@@ -60,7 +60,9 @@ class BaseDataset(Dataset, ABC):
         self.image_dir = Path(image_dir)
         self.mask_dir = Path(mask_dir)
 
-        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_pretrained_path)
+        self.tokenizer: PreTrainedTokenizerBase = AutoTokenizer.from_pretrained(
+            tokenizer_pretrained_path
+        )
         self.return_tensors = return_tensors
 
         self.transforms = transforms
@@ -243,7 +245,7 @@ class BaseDataset(Dataset, ABC):
     def get_text_output(
         self,
         phrase: str,
-    ) -> dict[str, list[int]] | dict[str, np.ndarray] | dict[str, torch.Tensor]:
+    ) -> Mapping[str, list[int] | np.ndarray | torch.Tensor]:
         """Get a format randomly if prompt_format_list has more than one entries
         else, if the format is fixed, the only entry is fetched making it deterministic.
 
@@ -266,6 +268,7 @@ class BaseDataset(Dataset, ABC):
             truncation=True,
             padding="max_length",
             return_tensors=self.return_tensors,
+            return_attention_mask=True,
         )
 
         # Remove the first (batch) dimension if self.return_tensors is not None

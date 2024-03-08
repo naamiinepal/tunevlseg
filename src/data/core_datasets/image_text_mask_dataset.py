@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     StrOrPath = str | Path
     PromptType = str | list[str]
     PromptMappingType = Mapping[str, PromptType]
-    TransformType = Callable[[MatLike, MatLike], Mapping[str, MatLike]]
+    TransformType = Callable[..., Mapping[str, MatLike]]
 
 
 class ImageTextDataset(Dataset):
@@ -41,16 +41,14 @@ class ImageTextDataset(Dataset):
         self.prompt_map_index = f"p{prompt_index}"
 
         with open(task_path, encoding="locale") as fp:
-            self.tasks: list[Mapping[str, str | PromptMappingType]] = json.load(
-                fp,
-            )
+            self.tasks: list[Mapping[str, str | PromptMappingType]] = json.load(fp)
 
     def __getitem__(self, index: int) -> dict[str, Any]:
         task = self.tasks[index]
 
-        img_name: str = task["img_name"]
-        mask_name: str = task["mask_name"]
-        prompts: PromptType = task["prompts"][self.prompt_map_index]
+        img_name: str = task["img_name"]  # type:ignore
+        mask_name: str = task["mask_name"]  # type:ignore
+        prompts: PromptType = task["prompts"][self.prompt_map_index]  # type:ignore
 
         img_path = self.img_root / img_name
         mask_path = self.mask_root / mask_name
@@ -80,7 +78,7 @@ class ImageTextDataset(Dataset):
         }
 
     @staticmethod
-    def load_image(img_path: Path) -> MatLike:
+    def load_image(img_path: StrOrPath) -> MatLike:
         img = cv2.imread(str(img_path))
 
         if img is None:
