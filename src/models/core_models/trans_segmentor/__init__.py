@@ -1,33 +1,30 @@
 from __future__ import annotations
 
-from functools import lru_cache
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import torch
 from torch import nn
 
 from .decoder import TransDecoder
-from .text_encoder import TransTextEncoder
-from .vision_encoder import TransVisionEncoder
+from .encoder import MultiModalEncoder
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
-    from pathlib import Path
-
-    StrOrPath = str | Path
+    from os import PathLike
 
 
 class TransformerSegmentor(nn.Module):
     def __init__(
         self,
-        image_pretrained_model_name_or_path: StrOrPath,
-        text_pretrained_model_name_or_path: StrOrPath,
-        freeze_image_encoder: bool,
-        freeze_text_encoder: bool,
+        pretrained_model_name_or_path: str | PathLike,
+        use_existing_proj: bool,
+        freeze_encoders: bool,
         add_pos_enc: bool,
-        decoder_layer_kwargs: Mapping[str, Any],
-        num_decoder_layers: int,
+        transformer_decoder: nn.TransformerDecoder,
         num_upsampler_layers: int,
+        upsampler_act: nn.Module,
+        upsampler_norm: nn.Module | str | None = None,
+        upsampler_num_channels_in_group: int = 64,
         image_size: int | None = None,
         num_output_channels: int = 1,
         *args,
@@ -52,38 +49,36 @@ class TransformerSegmentor(nn.Module):
         """
         super().__init__(*args, **kwargs)
 
-        # Freeze image encoder if needed
-        self.image_encoder = TransVisionEncoder(
-            image_pretrained_model_name_or_path,
+        self.encoder = MultiModalEncoder(
+            pretrained_model_name_or_path=pretrained_model_name_or_path,
+            use_existing_proj=use_existing_proj,
             image_size=image_size,
-        ).requires_grad_(not freeze_image_encoder)
-
-        img_config = self.image_encoder.config
-
-        image_hidden_size = img_config.hidden_size
-
-        self.text_encoder = TransTextEncoder(
-            pretrained_model_name_or_path=text_pretrained_model_name_or_path,
-            image_hidden_size=image_hidden_size,
+            freeze_encoders=freeze_encoders,
         )
 
-        # Freeze text encoder if needed, not but not the projection layer
-        self.text_encoder.model.requires_grad_(not freeze_text_encoder)  # type:ignore
+        vision_config = self.encoder.vision_config
 
-        final_image_size: int = image_size or img_config.image_size
+        final_image_size: int = image_size or vision_config.image_size
+        projection_dim = self.encoder.projection_dim
+
+        if add_pos_enc:
+            self.add_pos_embed_or_identity = self.get_with_pos_embed
+            if projection_dim % 2 != 0:
+                msg = f"Cannot use sin/cos positional encoding with odd dim (got dim={projection_dim})"
+                raise ValueError(msg)
+        else:
+            self.add_pos_embed_or_identity = nn.Identity()
 
         self.decoder = TransDecoder(
-            image_hidden_size=image_hidden_size,
-            decoder_layer_kwargs=decoder_layer_kwargs,
-            num_decoder_layers=num_decoder_layers,
-            patch_size=img_config.patch_size,
+            transformer_decoder=transformer_decoder,
+            projection_dim=projection_dim,
+            patch_size=vision_config.patch_size,
             num_upsampler_layers=num_upsampler_layers,
             final_image_size=final_image_size,
+            upsampler_act=upsampler_act,
             num_output_channels=num_output_channels,
-        )
-
-        self.add_pos_enc_or_identity = (
-            self.get_with_pos_enc if add_pos_enc else nn.Identity()
+            upsampler_norm=upsampler_norm,
+            upsampler_num_channels_in_group=upsampler_num_channels_in_group,
         )
 
     def forward(
@@ -91,18 +86,15 @@ class TransformerSegmentor(nn.Module):
         text_input: Mapping[str, torch.Tensor],
         image_input: torch.Tensor,
     ) -> torch.Tensor:
-        # shape: (B, N_t, H_i)
-        text_proj_output = self.text_encoder(**text_input)
+        # shape: (B, N_t, H_p)
+        text_embeds = self.encoder.get_text_features(**text_input)
 
-        # image object with pooled output and hidden states
-        image_output_obj = self.image_encoder(image_input)
-
-        # shape: (B, N_i, H_i)
-        image_last_hidden_state = image_output_obj.last_hidden_state
+        # shape: (B, N_i, H_p)
+        image_embeds = self.encoder.get_image_features(image_input)
 
         # Apply positional encoding, if needed
-        text_with_pos_enc = self.add_pos_enc_or_identity(text_proj_output)
-        image_with_pos_enc = self.add_pos_enc_or_identity(image_last_hidden_state)
+        text_with_pos_enc = self.add_pos_embed_or_identity(text_embeds)
+        image_with_pos_enc = self.add_pos_embed_or_identity(image_embeds)
 
         # shape: (B, num_output_channels, H, W)
         return self.decoder(
@@ -112,12 +104,12 @@ class TransformerSegmentor(nn.Module):
         )
 
     @staticmethod
-    def get_with_pos_enc(x: torch.Tensor) -> torch.Tensor:
+    def get_with_pos_embed(x: torch.Tensor) -> torch.Tensor:
         # Get the number of tokens and hidden size
         _, N, H = x.shape
 
         # Get positional encoding
-        posenc = TransformerSegmentor.get_posenc(
+        posenc = TransformerSegmentor.generate_pos_embed(
             d_model=H,
             token_length=N,
             device=x.device,
@@ -128,20 +120,15 @@ class TransformerSegmentor(nn.Module):
         return x + posenc
 
     @staticmethod
-    @lru_cache(maxsize=4)
     @torch.no_grad()
-    def get_posenc(
+    def generate_pos_embed(
         d_model: int,
         token_length: int,
         device: torch.device | None = None,
         dtype: torch.dtype | None = None,
     ) -> torch.Tensor:
-        if d_model % 2 != 0:
-            msg = f"Cannot use sin/cos positional encoding with odd dim (got dim={d_model})"
-            raise ValueError(msg)
-
         # Create a tensor of shape (token_length, d_model)
-        posenc = torch.zeros(token_length, d_model, device=device, dtype=dtype)
+        embeddings = torch.zeros(token_length, d_model, device=device, dtype=dtype)
 
         # Create a tensor of shape (token_length, 1)
         position = torch.arange(token_length, device=device, dtype=dtype).unsqueeze(1)
@@ -155,7 +142,7 @@ class TransformerSegmentor(nn.Module):
         angles = position * mul_term
 
         # Add sin and cos to the posenc tensor
-        posenc[:, 0::2] = torch.sin(angles)
-        posenc[:, 1::2] = torch.cos(angles)
+        embeddings[:, 0::2] = torch.sin(angles)
+        embeddings[:, 1::2] = torch.cos(angles)
 
-        return posenc  # (token_length, d_model)
+        return embeddings  # (token_length, d_model)

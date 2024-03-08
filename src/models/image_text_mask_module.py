@@ -293,8 +293,8 @@ class ImageTextMaskModule(LightningModule):
         whitelist_weight_modules = (nn.Linear, nn.Conv2d, nn.Conv1d)
         blacklist_weight_modules = (
             nn.Embedding,
-            nn.LayerNorm,
-            nn.BatchNorm2d,
+            nn.GroupNorm,
+            nn.modules.batchnorm._NormBase,  # Base class for batchnorm and instance norm
         )
         for mn, m in self.named_modules():
             for pn, _ in m.named_parameters():
