@@ -2,29 +2,48 @@ _target_: src.models.image_text_mask_module.ImageTextMaskModule
 
 net:
   _target_: src.models.core_models.trans_segmentor.TransformerSegmentor
-  image_pretrained_model_name_or_path: ${image_pretrained_path}
-  text_pretrained_model_name_or_path: ${text_pretrained_path}
-  freeze_image_encoder: false
-  freeze_text_encoder: false
+  pretrained_model_name_or_path: ${model_pretrained_path}
+  use_existing_proj: true
+  freeze_encoders: false
   add_pos_enc: false
-  decoder_layer_kwargs:
-    nhead: 8
-    dropout: 0.1
-    norm_first: true
-  num_decoder_layers: 4
+  transformer_decoder:
+    _target_: torch.nn.TransformerDecoder
+    decoder_layer:
+      _target_: src.models.components.PreCrossAttentionTransformerDecoderLayer
+      d_model: ${decoder_dim}
+      nhead: 12
+      dim_feedforward: 2048
+      dropout: 0.1
+      activation:
+        _target_: torch.nn.GELU
+        approximate: none
+      batch_first: true
+      norm_first: true
+      bias: true
+    num_layers: 4
+    norm:
+      _target_: torch.nn.LayerNorm
+      normalized_shape: ${decoder_dim}
   num_upsampler_layers: 5
+  upsampler_act:
+    _target_: torch.nn.ReLU
+    inplace: true
+  upsampler_norm: layer
+  upsampler_num_channels_in_group: 64
+  image_size: null
   num_output_channels: 1
 
 loss_fn:
   _target_: monai.losses.DiceCELoss
   sigmoid: true
-  lambda_ce: 0.25
+  lambda_dice: 1
+  lambda_ce: 1
 
 weight_decay: 0.0
 optimizer:
   _target_: torch.optim.AdamW
   _partial_: true
-  lr: 2.0e-4
+  lr: 2.0e-5
 
 # lr_scheduler_config:
 #   interval: step
@@ -36,11 +55,11 @@ optimizer:
 #   eta_min: 1.0e-6
 
 scheduler:
- _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
- _partial_: true
- mode: min
- factor: 0.1
- patience: 4
+  _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
+  _partial_: true
+  mode: min
+  factor: 0.2
+  patience: 4
 
 tokenizer_name_or_path: ${tokenizer_pretrained_path}
 
