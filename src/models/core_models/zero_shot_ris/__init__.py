@@ -13,7 +13,7 @@ from .freesolo import CustomFreeSOLO
 from .hfclip import CustomHFCLIP
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Mapping
 
     from torch.serialization import FILE_LIKE
 
@@ -305,33 +305,32 @@ class ZeroShotRIS(nn.Module):
                 np_crop_features = data["crop_features"]
                 crop_features = torch.as_tensor(np_crop_features, **image_like_kwargs)  # type:ignore
 
-        else:
-            if visual_feature_cache_filename is not None and self.write_cache:
-                # Need to calculate both features if writing to cache
-                mask_features = self.get_mask_features(image_input, pred_masks)
-                crop_features = self.get_cropped_features(
-                    image_input,
-                    pred_boxes,
-                    pred_masks,
-                )
+        elif visual_feature_cache_filename is not None and self.write_cache:
+            # Need to calculate both features if writing to cache
+            mask_features = self.get_mask_features(image_input, pred_masks)
+            crop_features = self.get_cropped_features(
+                image_input,
+                pred_boxes,
+                pred_masks,
+            )
 
-                np.savez_compressed(
-                    visual_feature_cache_filename,
-                    mask_features=mask_features.cpu().numpy(),
-                    crop_features=crop_features.cpu().numpy(),
-                )
-            else:
-                zero_tensor = torch.zeros(1, **image_like_kwargs)
-                mask_features = (
-                    self.get_mask_features(image_input, pred_masks)
-                    if self.alpha != 0
-                    else zero_tensor
-                )
-                crop_features = (
-                    self.get_cropped_features(image_input, pred_boxes, pred_masks)
-                    if self.alpha != 1
-                    else zero_tensor
-                )
+            np.savez_compressed(
+                visual_feature_cache_filename,
+                mask_features=mask_features.cpu().numpy(),
+                crop_features=crop_features.cpu().numpy(),
+            )
+        else:
+            zero_tensor = torch.zeros(1, **image_like_kwargs)
+            mask_features = (
+                self.get_mask_features(image_input, pred_masks)
+                if self.alpha != 0
+                else zero_tensor
+            )
+            crop_features = (
+                self.get_cropped_features(image_input, pred_boxes, pred_masks)
+                if self.alpha != 1
+                else zero_tensor
+            )
 
         return self.alpha * mask_features + (1 - self.alpha) * crop_features
 

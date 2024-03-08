@@ -21,7 +21,6 @@ Usage:
         --csv_path <path to save csv file>
 """
 
-
 import concurrent.futures
 import os
 from argparse import ArgumentParser

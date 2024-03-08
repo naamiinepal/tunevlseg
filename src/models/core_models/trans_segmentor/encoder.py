@@ -2,16 +2,16 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import torch
 from torch import nn
 from torch.nn import functional as F
 from transformers import AutoModel, CLIPModel, SiglipModel
-from transformers.modeling_outputs import BaseModelOutputWithPooling
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
     from os import PathLike
 
-    import torch
+    from transformers.modeling_outputs import BaseModelOutputWithPooling
 
 
 class MultiModalEncoder(nn.Module):
@@ -36,7 +36,9 @@ class MultiModalEncoder(nn.Module):
         super().__init__()
 
         self.model: CLIPModel | SiglipModel = AutoModel.from_pretrained(
-            pretrained_model_name_or_path, *args, **kwargs
+            pretrained_model_name_or_path,
+            *args,
+            **kwargs,
         )
 
         config = self.model.config
@@ -75,7 +77,8 @@ class MultiModalEncoder(nn.Module):
 
     def get_text_features(self, *args, **kwargs) -> torch.FloatTensor:
         text_outputs: BaseModelOutputWithPooling = self.model.text_model(
-            *args, **kwargs
+            *args,
+            **kwargs,
         )
 
         # shape: (B, N_t, H_t)
@@ -86,7 +89,8 @@ class MultiModalEncoder(nn.Module):
 
     def get_image_features(self, *args, **kwargs) -> torch.FloatTensor:
         visual_outputs: BaseModelOutputWithPooling = self.model.vision_model(
-            *args, **kwargs
+            *args,
+            **kwargs,
         )
 
         # shape: (B, N_t, H_i)
@@ -96,10 +100,12 @@ class MultiModalEncoder(nn.Module):
         return self.visual_projection(image_embeds)
 
     def forward(
-        self, text_input: Mapping[str, torch.Tensor], image_input: torch.Tensor
+        self,
+        text_input: Mapping[str, torch.Tensor],
+        image_input: torch.Tensor,
     ):
         return self.get_text_features(**text_input), self.get_image_features(
-            image_input
+            image_input,
         )
 
     @torch.no_grad

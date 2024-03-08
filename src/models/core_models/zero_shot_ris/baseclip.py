@@ -22,8 +22,7 @@ class BaseCLIP(nn.Module, ABC):
         masking_block_idx: int | None = None,
         *args,
         **kwargs,
-    ) -> torch.Tensor:
-        ...
+    ) -> torch.Tensor: ...
 
     @abstractmethod
     def get_text_features(
@@ -32,5 +31,4 @@ class BaseCLIP(nn.Module, ABC):
         attention_mask: Any = None,
         *args,
         **kwargs,
-    ) -> torch.Tensor:
-        ...
+    ) -> torch.Tensor: ...

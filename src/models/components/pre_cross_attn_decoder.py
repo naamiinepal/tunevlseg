@@ -6,6 +6,7 @@ class PreCrossAttentionTransformerDecoderLayer(TransformerDecoderLayer):
     """Transformer Decoder Layer with cross-attention before the self-attention.
 
     Args:
+    ----
         d_model: the number of expected features in the input (required).
         nhead: the number of heads in the multiheadattention models (required).
         dim_feedforward: the dimension of the feedforward network model (default=2048).
@@ -32,6 +33,7 @@ class PreCrossAttentionTransformerDecoderLayer(TransformerDecoderLayer):
         >>> memory = torch.rand(32, 10, 512)
         >>> tgt = torch.rand(32, 20, 512)
         >>> out = decoder_layer(tgt, memory)
+
     """
 
     def forward(
@@ -61,17 +63,24 @@ class PreCrossAttentionTransformerDecoderLayer(TransformerDecoderLayer):
                 memory_is_causal,
             )
             x = x + self._sa_block(
-                self.norm1(x), tgt_mask, tgt_key_padding_mask, tgt_is_causal
+                self.norm1(x),
+                tgt_mask,
+                tgt_key_padding_mask,
+                tgt_is_causal,
             )
             return x + self._ff_block(self.norm3(x))
 
         x = self.norm2(
             x
             + self._mha_block(
-                x, memory, memory_mask, memory_key_padding_mask, memory_is_causal
-            )
+                x,
+                memory,
+                memory_mask,
+                memory_key_padding_mask,
+                memory_is_causal,
+            ),
         )
         x = self.norm1(
-            x + self._sa_block(x, tgt_mask, tgt_key_padding_mask, tgt_is_causal)
+            x + self._sa_block(x, tgt_mask, tgt_key_padding_mask, tgt_is_causal),
         )
         return self.norm3(x + self._ff_block(x))

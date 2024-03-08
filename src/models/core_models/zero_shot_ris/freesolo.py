@@ -1,10 +1,6 @@
-from typing import Any
-
-import numpy as np
 import torch
 from torch import nn
 from torch.serialization import FILE_LIKE
-from torchvision.transforms import Normalize
 
 from ..detectron2.structures.boxes import Boxes
 from ..solov2 import PseudoSOLOv2

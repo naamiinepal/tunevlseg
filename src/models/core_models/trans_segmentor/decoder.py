@@ -109,7 +109,9 @@ class TransDecoder(nn.Module):
         return self.upsampler(img_channel_first)
 
     def get_expanded_memory_mask(
-        self, memory_mask: torch.Tensor, N_i: int
+        self,
+        memory_mask: torch.Tensor,
+        N_i: int,
     ) -> torch.Tensor:
         B, N_t = memory_mask.shape
         n_heads = self.num_heads
@@ -248,8 +250,10 @@ class TransDecoder(nn.Module):
 
             layers.append(
                 __class__.get_norm_module(
-                    norm, num_channels=normalized_shape, **(norm_kwargs or {})
-                )
+                    norm,
+                    num_channels=normalized_shape,
+                    **(norm_kwargs or {}),
+                ),
             )
 
         if activation is not None:
@@ -269,16 +273,20 @@ class TransDecoder(nn.Module):
         Needed because some parameters of norm needs to be filled dynamically.
 
         Args:
+        ----
             norm: The norm type or the instance of nn.Module itself.
             num_channels: The number of channels or normalized_shape
             **decoder_kwargs: The extra kwargs to pass to the norm.
 
         Raises:
-            ValueError:Raised when the num_channels is not an int for GroupNorm, or BatchNorm2d
+        ------
+            ValueError: Raised when the num_channels is not an int for GroupNorm, or BatchNorm2d
             NotImplementedError: Raised when norm type is not supported
 
         Returns:
+        -------
             Returns a freshly baked nn.Module instance of the norm.
+
         """
         if isinstance(norm, nn.Module):
             # Make a copy of norm since some norm may be learnable
@@ -288,10 +296,11 @@ class TransDecoder(nn.Module):
             return nn.LayerNorm(normalized_shape=num_channels, **decoder_kwargs)
 
         if not isinstance(num_channels, int):
-            raise ValueError(
+            msg = (
                 f"Please provide num_channels as an int for norm: {norm}. "
                 f"Got of type {type(num_channels)}"
             )
+            raise ValueError(msg)
 
         if norm == "group":
             return nn.GroupNorm(num_channels=num_channels, **decoder_kwargs)
@@ -299,6 +308,7 @@ class TransDecoder(nn.Module):
         if norm == "batch":
             return nn.BatchNorm2d(num_channels, **decoder_kwargs)
 
+        msg = f"Norm type {norm} not implemented. Please pass as a module itself"
         raise NotImplementedError(
-            f"Norm type {norm} not implemented. Please pass as a module itself"
+            msg,
         )
