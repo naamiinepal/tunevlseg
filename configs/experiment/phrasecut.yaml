@@ -32,16 +32,17 @@ model:
   optimizer:
     lr: 2.0e-5
   net:
+    use_existing_proj: true
     freeze_encoders: true
     add_pos_enc: false
-    decoder_layer_kwargs:
-      nhead: 12
-      dropout: 0.1
-      norm_first: true
-    num_decoder_layers: 4
+    transformer_decoder:
+      decoder_layer:
+        nhead: 8
+        dropout: 0.1
+        norm_first: true
+      num_layers: 4
     num_upsampler_layers: 5
     image_size: ${img_size}
-    use_existing_proj: true
   compile: false # Torch compile works only when CUDA Compat >= 7.0
   loss_fn:
     lambda_dice: 1

@@ -11,7 +11,7 @@ net:
     decoder_layer:
       _target_: src.models.components.PreCrossAttentionTransformerDecoderLayer
       d_model: ${decoder_dim}
-      nhead: 12
+      nhead: 8
       dim_feedforward: 2048
       dropout: 0.1
       activation:
