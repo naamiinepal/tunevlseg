@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import copy
 import math
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 
 from torch import nn
 
@@ -71,12 +71,13 @@ class TransDecoder(nn.Module):
     def forward(
         self,
         tgt: torch.Tensor,
-        memory_mask: torch.Tensor | None,
+        attention_mask: torch.Tensor | None,
         *args,
         **kwargs,
     ) -> torch.Tensor:
-        if memory_mask is not None:
-            memory_mask = self.get_expanded_memory_mask(memory_mask, tgt.size(1))
+        memory_mask = self.get_memory_mask_from_attention_mask(
+            attention_mask, tgt.size(1)
+        )
 
         # shape: (B, N_i + 1, H_i)
         trans_output: torch.Tensor = self.transformer_decoder(
@@ -108,17 +109,21 @@ class TransDecoder(nn.Module):
 
         return self.upsampler(img_channel_first)
 
-    def get_expanded_memory_mask(
+    def get_memory_mask_from_attention_mask(
         self,
-        memory_mask: torch.Tensor,
+        attention_mask: torch.Tensor | None,
         N_i: int,
-    ) -> torch.Tensor:
-        B, N_t = memory_mask.shape
+    ) -> torch.Tensor | None:
+        if attention_mask is None:
+            return None
+
+        B, N_t = attention_mask.shape
         n_heads = self.num_heads
 
-        # needed shape: (B * n_head, N_i, N_t)
-        return (
-            memory_mask.expand(n_heads * N_i, B, N_t)
+        # shape: (B * n_head, N_i, N_t)
+        # also negate the attention mask to get the memory_mask
+        return ~(
+            attention_mask.expand(n_heads * N_i, B, N_t)
             .moveaxis(1, 0)
             .reshape(B * n_heads, N_i, N_t)
             .bool()

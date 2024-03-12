@@ -94,13 +94,14 @@ class TransformerSegmentor(nn.Module):
 
         # Apply positional encoding, if needed
         text_with_pos_enc = self.add_pos_embed_or_identity(text_embeds)
+
         image_with_pos_enc = self.add_pos_embed_or_identity(image_embeds)
 
         # shape: (B, num_output_channels, H, W)
         return self.decoder(
             tgt=image_with_pos_enc,
             memory=text_with_pos_enc,
-            memory_mask=text_input.get("attention_mask"),
+            attention_mask=text_input.get("attention_mask"),
         )
 
     @staticmethod
