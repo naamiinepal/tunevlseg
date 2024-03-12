@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import copy
 import math
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING
 
 from torch import nn
 
@@ -76,7 +76,8 @@ class TransDecoder(nn.Module):
         **kwargs,
     ) -> torch.Tensor:
         memory_mask = self.get_memory_mask_from_attention_mask(
-            attention_mask, tgt.size(1)
+            attention_mask,
+            tgt.size(1),
         )
 
         # shape: (B, N_i + 1, H_i)
@@ -104,7 +105,10 @@ class TransDecoder(nn.Module):
         # Make the output 4D
         # shape: (B, H_i, sqrt(N_i), sqrt(N_i))
         img_channel_first = channel_first_output.view(
-            -1, hidden_dim, sqrt_seq_len, sqrt_seq_len
+            -1,
+            hidden_dim,
+            sqrt_seq_len,
+            sqrt_seq_len,
         )
 
         return self.upsampler(img_channel_first)

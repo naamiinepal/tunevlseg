@@ -8,7 +8,7 @@ from torch.nn import functional as F
 from transformers import AutoModel, CLIPModel, SiglipModel
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Mapping
     from os import PathLike
 
     from transformers.modeling_outputs import BaseModelOutputWithPooling
@@ -49,16 +49,18 @@ class MultiModalEncoder(nn.Module):
         self.text_config = config.text_config
         self.vision_config = config.vision_config
 
-        self.text_projection, self.visual_projection, self.projection_dim = (
-            self.get_projections(use_existing_proj)
-        )
+        (
+            self.text_projection,
+            self.visual_projection,
+            self.projection_dim,
+        ) = self.get_projections(use_existing_proj)
 
         if image_size is not None and image_size != self.vision_config.image_size:
             self.resize_image_position_embedding(image_size)
 
         self.perform_freezing(freeze_encoders, use_existing_proj)
 
-    def perform_freezing(self, freeze_encoders: bool, use_existing_proj: bool):
+    def perform_freezing(self, freeze_encoders: bool, use_existing_proj: bool) -> None:
         # Compute gradient when not frozen
         self.requires_grad_(not freeze_encoders)
 
@@ -77,10 +79,14 @@ class MultiModalEncoder(nn.Module):
                 getattr(self.model.text_model, "head", nn.Identity()),
             )
             visual_projection = getattr(
-                self.model, "visual_projection", self._siglip_project_image
+                self.model,
+                "visual_projection",
+                self._siglip_project_image,
             )
             projection_dim: int = getattr(
-                self.model.config, "projection_dim", image_hidden_size
+                self.model.config,
+                "projection_dim",
+                image_hidden_size,
             )
         else:
             # Make textual projection layer identity if hidden sizes match
@@ -96,7 +102,8 @@ class MultiModalEncoder(nn.Module):
         return text_projection, visual_projection, projection_dim
 
     def _siglip_project_image(
-        self, hidden_state: torch.FloatTensor
+        self,
+        hidden_state: torch.FloatTensor,
     ) -> torch.FloatTensor:
         model: SiglipMultiheadAttentionPoolingHead = self.model.vision_model.head
 

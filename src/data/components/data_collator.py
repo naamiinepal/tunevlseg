@@ -6,7 +6,7 @@ from transformers import DataCollatorWithPadding
 
 
 class CustomDataCollatorWithPadding(DataCollatorWithPadding):
-    def __init__(self, padding_keys: Iterable[str], *args, **kwargs):
+    def __init__(self, padding_keys: Iterable[str], *args, **kwargs) -> None:
         self.padding_keys = set(padding_keys)
         if not self.padding_keys:
             msg = "`padding_keys` should not be empty."
