@@ -42,9 +42,7 @@ class ImageTextDatamodule(LightningDataModule):
         if self.trainer is not None:
             if self.hparams.batch_size % self.trainer.world_size != 0:  # type:ignore
                 msg = f"Batch size ({self.hparams.batch_size}) is not divisible by the number of devices ({self.trainer.world_size})."  # type:ignore
-                raise ValueError(
-                    msg,
-                )
+                raise ValueError(msg)
             # Divide batch size by the number of devices.
             self.batch_size_per_device //= self.trainer.world_size  # type:ignore
 
@@ -57,6 +55,7 @@ class ImageTextDatamodule(LightningDataModule):
             dataset=self.hparams.train_ds,  # type:ignore
             batch_size=self.batch_size_per_device,
             num_workers=self.hparams.num_workers,  # type:ignore
+            collate_fn=self.hparams.train_ds.collate_fn,  # type:ignore
             pin_memory=self.hparams.pin_memory,  # type:ignore
             drop_last=self.hparams.drop_last,  # type:ignore
             shuffle=True,
@@ -71,6 +70,7 @@ class ImageTextDatamodule(LightningDataModule):
             dataset=self.hparams.val_ds,  # type:ignore
             batch_size=self.batch_size_per_device,  # type:ignore
             num_workers=self.hparams.num_workers,  # type:ignore
+            collate_fn=self.hparams.val_ds.collate_fn,  # type:ignore
             pin_memory=self.hparams.pin_memory,  # type:ignore
             shuffle=False,
         )
@@ -84,6 +84,7 @@ class ImageTextDatamodule(LightningDataModule):
             dataset=self.hparams.test_ds,  # type:ignore
             batch_size=self.batch_size_per_device,
             num_workers=self.hparams.num_workers,  # type:ignore
+            collate_fn=self.hparams.test_ds.collate_fn,  # type:ignore
             pin_memory=self.hparams.pin_memory,  # type:ignore
             shuffle=False,
         )

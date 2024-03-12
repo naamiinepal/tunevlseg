@@ -8,6 +8,7 @@ train_ds:
   return_tensors: pt
   prompt_method: shuffle+
   neg_prob: 0.2
+  collate_fn: ${collate_fn}
 
 val_ds:
   _target_: src.data.core_datasets.phrasecutdataset.PhraseCutDataset

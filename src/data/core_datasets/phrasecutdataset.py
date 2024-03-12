@@ -10,6 +10,8 @@ from .basedataset import BaseDataset
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
 
+    from torch.utils.data.dataloader import _collate_fn_t
+
     from .basedataset import JSONMapping, PromptMethodType, ReturnTensorsType, StrPath
 
 
@@ -27,6 +29,7 @@ class PhraseCutDataset(BaseDataset):
         neg_prob: float = 0,
         neg_sample_tries: int = 1000,
         filter_tasks: bool = False,
+        collate_fn: _collate_fn_t[JSONMapping] | None = None,
     ) -> None:
         task_json_path = Path(data_root, task_json_path)
         image_dir = Path(data_root, image_dir)
@@ -42,6 +45,7 @@ class PhraseCutDataset(BaseDataset):
             neg_prob=neg_prob,
             neg_sample_tries=neg_sample_tries,
             filter_tasks=filter_tasks,
+            collate_fn=collate_fn,
         )
 
     @staticmethod

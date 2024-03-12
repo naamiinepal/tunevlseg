@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 
     import torch
     from cv2.typing import MatLike
+    from torch.utils.data.dataloader import _collate_fn_t
 
     StrPath = str | Path
 
@@ -40,6 +41,7 @@ class BaseDataset(Dataset, ABC):
         neg_prob: float = 0,
         neg_sample_tries: int = 1000,
         filter_tasks: bool = False,
+        collate_fn: _collate_fn_t[JSONMapping] | None = None,
     ) -> None:
         super().__init__()
 
@@ -61,7 +63,7 @@ class BaseDataset(Dataset, ABC):
         self.mask_dir = Path(mask_dir)
 
         self.tokenizer: PreTrainedTokenizerBase = AutoTokenizer.from_pretrained(
-            tokenizer_pretrained_path
+            tokenizer_pretrained_path,
         )
         self.return_tensors = return_tensors
 
@@ -71,6 +73,8 @@ class BaseDataset(Dataset, ABC):
         self.neg_sample_tries = neg_sample_tries
 
         self.prompt_format_choices = self.get_prompt_list(prompt_method)
+
+        self.collate_fn = collate_fn
 
     @staticmethod
     @abstractmethod
@@ -266,7 +270,7 @@ class BaseDataset(Dataset, ABC):
         text_inputs = self.tokenizer(
             prompt,
             truncation=True,
-            padding="max_length",
+            padding=True,
             return_tensors=self.return_tensors,
             return_attention_mask=True,
         )

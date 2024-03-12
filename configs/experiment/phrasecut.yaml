@@ -132,3 +132,13 @@ _eval_transforms:
 
 val_transforms: ${_eval_transforms}
 test_transforms: ${_eval_transforms}
+
+collate_fn:
+  _target_: transformers.DataCollatorWithPadding
+  tokenizer:
+    _target_: transformers.AutoTokenizer.from_pretrained
+    pretrained_model_name: ${tokenizer_pretrained_path}
+  padding: true
+  max_length: null
+  pad_to_multiple_of: null
+  return_tensors: pt
