@@ -37,7 +37,7 @@ model:
     add_pos_enc: false
     transformer_decoder:
       decoder_layer:
-        nhead: 8
+        nhead: 16
         dropout: 0.1
         norm_first: true
       num_layers: 4
@@ -134,10 +134,11 @@ val_transforms: ${_eval_transforms}
 test_transforms: ${_eval_transforms}
 
 collate_fn:
-  _target_: transformers.DataCollatorWithPadding
+  _target_: src.data.components.data_collator.CustomDataCollatorWithPadding
   tokenizer:
     _target_: transformers.AutoTokenizer.from_pretrained
-    pretrained_model_name: ${tokenizer_pretrained_path}
+    pretrained_model_name_or_path: ${tokenizer_pretrained_path}
+  padding_keys: ["input_ids", "attention_mask"]
   padding: true
   max_length: null
   pad_to_multiple_of: null

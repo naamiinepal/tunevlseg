@@ -19,6 +19,7 @@ val_ds:
   return_tensors: pt
   prompt_method: fixed
   neg_prob: 0
+  collate_fn: ${collate_fn}
 
 test_ds:
   _target_: src.data.core_datasets.phrasecutdataset.PhraseCutDataset
@@ -29,6 +30,7 @@ test_ds:
   return_tensors: pt
   prompt_method: fixed
   neg_prob: 0
+  collate_fn: ${collate_fn}
 
 batch_size: 32
 num_workers: 4
