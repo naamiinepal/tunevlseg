@@ -72,13 +72,15 @@ class MultiModalEncoder(nn.Module):
         image_hidden_size = self.vision_config.hidden_size
         if use_existing_proj:
             text_projection = getattr(
-                self.model, "text_projection", self.model.text_model.head
+                self.model,
+                "text_projection",
+                getattr(self.model.text_model, "head", nn.Identity()),
             )
             visual_projection = getattr(
                 self.model, "visual_projection", self._siglip_project_image
             )
             projection_dim: int = getattr(
-                self.config, "projection_dim", image_hidden_size
+                self.model.config, "projection_dim", image_hidden_size
             )
         else:
             # Make textual projection layer identity if hidden sizes match
