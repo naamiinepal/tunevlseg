@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 
     MappingStr2Any = Mapping[str, Any]
     DictStr2Any = dict[str, Any]
+    TaskType = Literal["binary", "multiclass", "multilabel"]
 
 
 class ImageTextMaskModule(LightningModule):
@@ -34,7 +35,7 @@ class ImageTextMaskModule(LightningModule):
         scheduler: type[optim.lr_scheduler.LRScheduler] | None,
         tokenizer_name_or_path: str | Path,
         compile: bool,
-        task: Literal["binary", "multiclass", "multilabel"],
+        task: TaskType,
         threshold: float = 0.5,
         weight_decay: float = 0.0,
         log_image_num: int = 8,
@@ -65,25 +66,30 @@ class ImageTextMaskModule(LightningModule):
             pretrained_model_name_or_path=tokenizer_name_or_path,
         )
 
-        # Dice Loggers
-        dice_kwargs = {"threshold": threshold, "average": "samples"}
-        self.train_dice = Dice(**dice_kwargs)
-        self.val_dice = Dice(**dice_kwargs)
-        self.test_dice = Dice(**dice_kwargs)
-
-        # IoU Loggers
-        iou_kwargs = {"task": task, "threshold": threshold}
-        self.train_iou = JaccardIndex(**iou_kwargs)
-        self.val_iou = JaccardIndex(**iou_kwargs)
-        self.test_iou = JaccardIndex(**iou_kwargs)
-
         self.activation_fn = nn.Identity() if activation_fn is None else activation_fn
 
         self.logger: WandbLogger | None
 
+        self.registered_metric_names: list[str] = []
+
     def forward(self, *args, **kwargs) -> torch.Tensor:
         """Perform a forward pass through the model `self.net`."""
         return self.net(*args, **kwargs)
+
+    def on_train_start(self) -> None:
+        """Lightning hook that is called when training begins."""
+        # by default lightning executes validation step sanity checks before training starts,
+        # so it's worth to make sure validation metrics don't store results from these checks
+        for metric_name in self.registered_metric_names:
+            if metric_name.startswith("val"):
+                # Should always be registered, but just in case
+                metric = getattr(self, metric_name, None)
+
+                reset_func = getattr(metric, "reset", None)
+
+                # May not be available if not an instanc of torchmetrics
+                if reset_func is not None:
+                    reset_func()
 
     def model_step(
         self,
@@ -271,7 +277,12 @@ class ImageTextMaskModule(LightningModule):
 
         return self(image_input=img, text_input=text_input)
 
-    def setup(self, stage: str | None) -> None:
+    def store_and_register_metrics(self, metric_name: str, metric: Any) -> None:
+        setattr(self, metric_name, metric)
+
+        self.registered_metric_names.append(metric_name)
+
+    def setup(self, stage: str) -> None:
         """Lightning hook that is called at the beginning of fit (train + validate), validate,
         test, or predict.
 
@@ -280,8 +291,26 @@ class ImageTextMaskModule(LightningModule):
 
         :param stage: Either `"fit"`, `"validate"`, `"test"`, or `"predict"`.
         """
-        if self.hparams.compile and (stage is None or stage == "fit"):  # type: ignore
+        if self.hparams.compile and stage == "fit":  # type: ignore
             self.net = torch.compile(self.net)
+
+        threshold: float = self.hparams.threshold  # type:ignore
+        dice_kwargs = {"threshold": threshold, "average": "samples"}
+
+        task: TaskType = self.hparams.task  # type:ignore
+        iou_kwargs = {"task": task, "threshold": threshold}
+
+        if stage == "fit":
+            self.store_and_register_metrics("train_dice", Dice(**dice_kwargs))
+            self.store_and_register_metrics("train_iou", JaccardIndex(**iou_kwargs))
+
+        if stage in {"fit", "validate"}:
+            self.store_and_register_metrics("val_dice", Dice(**dice_kwargs))
+            self.store_and_register_metrics("val_iou", JaccardIndex(**iou_kwargs))
+
+        if stage == "test":
+            self.store_and_register_metrics("test_dice", Dice(**dice_kwargs))
+            self.store_and_register_metrics("test_iou", JaccardIndex(**iou_kwargs))
 
     def get_optim_groups(self):
         if self.hparams.weight_decay <= 0:  # type: ignore
@@ -290,7 +319,7 @@ class ImageTextMaskModule(LightningModule):
         # separate out all parameters to those that will and won't experience regularizing weight decay
         decay = set()
         no_decay = set()
-        whitelist_weight_modules = (nn.Linear, nn.Conv2d, nn.Conv1d)
+        whitelist_weight_modules = (nn.Linear, nn.modules.conv._ConvNd)
         blacklist_weight_modules = (
             nn.Embedding,
             nn.GroupNorm,
