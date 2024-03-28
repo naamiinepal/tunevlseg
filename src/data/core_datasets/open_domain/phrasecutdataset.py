@@ -5,24 +5,24 @@ from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from .basedataset import BaseDataset
+from . import OpenDomainBaseDataset
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
 
     from torch.utils.data.dataloader import _collate_fn_t
 
-    from .basedataset import JSONMapping, PromptMethodType, ReturnTensorsType, StrPath
+    from . import JSONMapping, PromptMethodType, ReturnTensorsType, StrOrPath
 
 
-class PhraseCutDataset(BaseDataset):
+class PhraseCutDataset(OpenDomainBaseDataset):
     def __init__(
         self,
-        data_root: StrPath,
-        task_json_path: StrPath,
-        tokenizer_pretrained_path: StrPath,
-        image_dir: StrPath = "images",
-        mask_dir: StrPath = "masks",
+        data_root: StrOrPath,
+        task_json_path: StrOrPath,
+        tokenizer_pretrained_path: StrOrPath,
+        image_dir: StrOrPath = "images",
+        mask_dir: StrOrPath = "masks",
         transforms: Callable | None = None,
         return_tensors: ReturnTensorsType = None,
         prompt_method: PromptMethodType = "fixed",
@@ -49,7 +49,7 @@ class PhraseCutDataset(BaseDataset):
         )
 
     @staticmethod
-    def load_tasks(json_path: StrPath, filter_tasks: bool):
+    def load_tasks(json_path: StrOrPath, filter_tasks: bool):
         """Load tasks from a json file and filter out tasks that have phrase length less than 2.
         Also, exclude images with ids in invalid_img_ids (copied from clipseg).
 

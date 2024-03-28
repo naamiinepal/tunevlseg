@@ -1,88 +1,140 @@
-# pyright: reportGeneralTypeIssues=false
 from __future__ import annotations
 
 import json
 import random
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import cv2
-from torch.utils.data import Dataset
-from transformers import AutoTokenizer
+import numpy as np
+
+from .basedataset import BaseImageTextMaskDataset
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from .basedataset import (
+        CollateFnType,
+        ReturnTensorsType,
+        StrOrPath,
+        TransformsType,
+    )
 
-    from cv2.typing import MatLike
-
-    StrOrPath = str | Path
-    PromptType = str | list[str]
+    PromptType = str | Sequence[str]
     PromptMappingType = Mapping[str, PromptType]
-    TransformType = Callable[..., Mapping[str, MatLike]]
 
 
-class ImageTextDataset(Dataset):
+class ImageTextMaskDataset(BaseImageTextMaskDataset):
     def __init__(
         self,
-        img_root: StrOrPath,
-        mask_root: StrOrPath,
+        image_dir: StrOrPath,
+        mask_dir: StrOrPath,
         task_path: StrOrPath,
-        pretrained_model_name_or_path: StrOrPath,
+        tokenizer_pretrained_path: StrOrPath,
         prompt_index: int,
-        transform: TransformType | None = None,
+        override_prompt: str | None = None,
+        transforms: TransformsType | None = None,
+        context_length: int | None = None,
+        return_tensors: ReturnTensorsType = None,
+        collate_fn: CollateFnType = None,
+        *args,
+        **kwargs,
     ) -> None:
-        self.img_root = Path(img_root)
-        self.mask_root = Path(mask_root)
+        tasks = self.get_tasks(task_path)
 
-        self.tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path)
+        self.image_dir = Path(image_dir)
+        self.mask_dir = Path(mask_dir)
 
-        self.transform = transform
+        self.prompt_map_index = f"p{prompt_index}" if prompt_index >= 0 else "random"
 
-        self.prompt_map_index = f"p{prompt_index}"
+        self.override_prompt = override_prompt
 
+        if context_length is not None:
+            kwargs["model_max_length"] = context_length
+
+        super().__init__(
+            *args,
+            tasks=tasks,
+            tokenizer_pretrained_path=tokenizer_pretrained_path,
+            transforms=transforms,
+            return_tensors=return_tensors,
+            collate_fn=collate_fn,
+            **kwargs,
+        )
+
+    @staticmethod
+    def get_tasks(task_path: StrOrPath) -> list[dict[str, str | PromptMappingType]]:
         with open(task_path, encoding="locale") as fp:
-            self.tasks: list[Mapping[str, str | PromptMappingType]] = json.load(fp)
+            return json.load(fp)
 
     def __getitem__(self, index: int) -> dict[str, Any]:
         task = self.tasks[index]
 
-        img_name: str = task["img_name"]  # type:ignore
-        mask_name: str = task["mask_name"]  # type:ignore
-        prompts: PromptType = task["prompts"][self.prompt_map_index]  # type:ignore
+        # Get img_name and wrap in str to make linter happy
+        img_name = str(task["img_name"])
+        image = self.load_image(
+            path=self.image_dir / img_name,
+            imread_flags=cv2.IMREAD_COLOR,
+            cvtColor_code=cv2.COLOR_BGR2RGB,
+        )
 
-        img_path = self.img_root / img_name
-        mask_path = self.mask_root / mask_name
+        # Get mask_name and wrap in str to make linter happy
+        mask_name = str(task["mask_name"])
 
-        curr_prompt = prompts if isinstance(prompts, str) else random.choice(prompts)
+        # Mask needs to be of type float32
+        mask = (
+            self.load_image(self.mask_dir / mask_name, cv2.IMREAD_GRAYSCALE).astype(
+                np.float32,
+            )
+            / 255
+        )
 
-        img = self.load_image(img_path)
+        # Add the final channel layer to mask
+        mask = mask[..., None]
 
-        mask = self.load_image(mask_path)
-
-        if self.transform is not None:
-            transformed = self.transform(image=img, mask=mask)
-            img = transformed["image"]
+        if self.transforms is not None:
+            transformed = self.transforms(image=image, mask=mask)
+            image = transformed["image"]
             mask = transformed["mask"]
 
-        text = self.tokenizer(curr_prompt)
+        curr_prompt = self.get_curr_prompt(task)
 
-        # Also return the metadata to save the image
+        text_inputs = self.tokenizer(curr_prompt)
+
+        # Metadata are needed to save the image for the predict step
         return {
-            "text": text,
-            "img": img,
+            "image": image,
             "mask": mask,
-            "img_name": img_name,
+            "mask_shape": np.array(mask.shape),  # Needed to collate properly
             "mask_name": mask_name,
-            "img_shape": img.shape,
-            "mask_shape": mask.shape,
+            "prompt": curr_prompt,
+            **text_inputs,
         }
 
-    @staticmethod
-    def load_image(img_path: StrOrPath) -> MatLike:
-        img = cv2.imread(str(img_path))
+    def get_curr_prompt(self, task: Mapping[str, Any]) -> str:
+        prompts: PromptMappingType = task["prompts"]
 
-        if img is None:
-            msg = "Image is not found in the directory: "
-            raise ValueError(msg, img_path)
+        if not isinstance(prompts, Mapping):
+            msg = f"Expected `prompts` to be a `Mapping` but got: {type(prompts)} instead."
+            raise TypeError(msg)
+        # Use overrided prompt if provided
+        if self.override_prompt is not None:
+            return self.override_prompt
 
-        return img
+        if self.prompt_map_index == "random":
+            # sort the keys of the mapping without leading `p`
+            # and converting the remainder to int
+            # This implementation doesn't assume the order in the dict
+            possible_keys = sorted(prompts, key=lambda x: int(x[1:]))
+
+            # Randomly select a prompt except the first one i.e., p0
+            map_index = random.choice(possible_keys[1:])
+        else:
+            map_index = self.prompt_map_index
+
+        curr_prompt = prompts[map_index]
+
+        if isinstance(curr_prompt, str):
+            return curr_prompt
+
+        # Randomly choose from a list of prompts
+        return random.choice(curr_prompt)

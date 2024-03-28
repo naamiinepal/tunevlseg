@@ -4,12 +4,12 @@ import json
 from collections import defaultdict
 from typing import TYPE_CHECKING
 
-from .basedataset import BaseDataset
+from . import OpenDomainBaseDataset
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-    from .basedataset import JSONMapping, StrPath
+    from . import JSONMapping, StrOrPath
 
 # {
 #   "image_id": 380440,
@@ -20,9 +20,9 @@ if TYPE_CHECKING:
 # }
 
 
-class RefCOCODataset(BaseDataset):
+class RefCOCODataset(OpenDomainBaseDataset):
     @staticmethod
-    def load_tasks(json_path: StrPath, filter_tasks: bool):
+    def load_tasks(json_path: StrOrPath, filter_tasks: bool):
         with open(json_path, encoding="locale") as f:
             tasks = json.load(f)
 

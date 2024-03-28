@@ -1,6 +1,6 @@
 _target_: src.data.image_text_mask_datamodule.ImageTextDatamodule
 train_ds:
-  _target_: src.data.core_datasets.phrasecutdataset.PhraseCutDataset
+  _target_: src.data.core_datasets.open_domain.phrasecutdataset.PhraseCutDataset
   data_root: ${data_root}
   task_json_path: filtered_tasks/refer_train.json
   tokenizer_pretrained_path: ${tokenizer_pretrained_path}
@@ -11,7 +11,7 @@ train_ds:
   collate_fn: ${collate_fn}
 
 val_ds:
-  _target_: src.data.core_datasets.phrasecutdataset.PhraseCutDataset
+  _target_: src.data.core_datasets.open_domain.phrasecutdataset.PhraseCutDataset
   data_root: ${data_root}
   task_json_path: filtered_tasks/refer_val.json
   tokenizer_pretrained_path: ${tokenizer_pretrained_path}
@@ -22,7 +22,7 @@ val_ds:
   collate_fn: ${collate_fn}
 
 test_ds:
-  _target_: src.data.core_datasets.phrasecutdataset.PhraseCutDataset
+  _target_: src.data.core_datasets.open_domain.phrasecutdataset.PhraseCutDataset
   data_root: ${data_root}
   task_json_path: filtered_tasks/refer_test.json
   tokenizer_pretrained_path: ${tokenizer_pretrained_path}
