@@ -8,6 +8,7 @@ class ContextLearnerMixin(nn.Module):
         context_initializer: torch.Tensor | None = None,
         num_context: int | None = None,
         context_dim: int | None = None,
+        freeze_all: bool = True,
         *args,
         **kwargs,
     ) -> None:
@@ -26,6 +27,11 @@ class ContextLearnerMixin(nn.Module):
         self.num_context = len(context_initializer)
 
         self.context_vectors = nn.Parameter(context_initializer)
+
+        if freeze_all:
+            # Freeze all the parameters except the context vectors
+            self.requires_grad_(False)
+            self.context_vectors.requires_grad_(True)
 
     def init_context_vectors(self, num_context: int, context_dim: int) -> torch.Tensor:
         # Copied from Context Optimization (CoOp).
