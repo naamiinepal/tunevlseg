@@ -43,10 +43,14 @@ model:
       num_layers: 4
     num_upsampler_layers: 5
     image_size: ${img_size}
+    output_bias: -1.748104048321891
   compile: false # Torch compile works only when CUDA Compat >= 7.0
   loss_fn:
     lambda_dice: 1
-    lambda_ce: 1
+    lambda_ce: 0.2
+    weight:
+      _target_: torch.tensor
+      data: 5.8
 
 # The dimension after projection
 decoder_dim: 512
@@ -87,8 +91,9 @@ img_std: [0.26862954, 0.26130258, 0.27577711]
 train_transforms:
   _target_: albumentations.Compose
   transforms:
-    - _target_: albumentations.SmallestMaxSize
-      max_size: ${img_size}
+    - _target_: albumentations.Resize
+      height: ${img_size}
+      width: ${img_size}
       interpolation: ${import_eval:cv2.INTER_CUBIC}
     - _target_: albumentations.Rotate
       limit: 10

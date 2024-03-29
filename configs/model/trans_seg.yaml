@@ -32,6 +32,7 @@ net:
   upsampler_num_channels_in_group: 64
   image_size: null
   num_output_channels: 1
+  output_bias: null
 
 loss_fn:
   _target_: monai.losses.DiceCELoss

@@ -4,12 +4,13 @@ import copy
 import math
 from typing import TYPE_CHECKING
 
+import torch
 from torch import nn
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-    import torch
+    import numpy as np
     from torch.nn.common_types import _ratio_any_t, _size_2_t, _size_any_t
 
     StrOrModule = str | nn.Module
@@ -27,6 +28,7 @@ class TransDecoder(nn.Module):
         num_output_channels: int = 1,
         upsampler_norm: StrOrModule | None = None,
         upsampler_num_channels_in_group: int = 64,
+        output_bias: torch.Tensor | np.ndarray | float | None = None,
         *args,
         **kwargs,
     ) -> None:
@@ -66,6 +68,7 @@ class TransDecoder(nn.Module):
             norm=upsampler_norm,
             group_num_channels=upsampler_num_channels_in_group,
             activation=upsampler_act,
+            output_bias=output_bias,
         )
 
     def forward(
@@ -133,8 +136,9 @@ class TransDecoder(nn.Module):
             .bool()
         )
 
-    @staticmethod
+    @classmethod
     def get_upsampler(
+        cls,
         patch_size: int,
         num_upsampler_layers: int,
         projection_dim: int,
@@ -143,6 +147,7 @@ class TransDecoder(nn.Module):
         norm: StrOrModule | None,
         group_num_channels: int,
         activation: nn.Module,
+        output_bias: torch.Tensor | np.ndarray | float | None = None,
     ) -> nn.Sequential:
         """Gets the upsampler block to reduce the hidden channels to `num_output_channels` and increase the spatial dimension of output.
 
@@ -174,7 +179,7 @@ class TransDecoder(nn.Module):
             current_size = math.ceil(current_size * up_factor)
 
             layers.append(
-                TransDecoder.get_upsample_block(
+                cls.get_upsample_block(
                     size=current_size,
                     in_channels=in_channels,
                     out_channels=out_channels,
@@ -186,17 +191,18 @@ class TransDecoder(nn.Module):
 
             in_channels = out_channels
 
-        return nn.Sequential(
-            *layers,
-            TransDecoder.get_upsample_block(
-                size=final_image_size,
-                in_channels=in_channels,
-                out_channels=num_output_channels,
-            ),
+        last_layer = cls.get_upsample_block(
+            size=final_image_size,
+            in_channels=in_channels,
+            out_channels=num_output_channels,
+            conv_bias=output_bias,
         )
 
-    @staticmethod
+        return nn.Sequential(*layers, last_layer)
+
+    @classmethod
     def get_upsample_block(
+        cls,
         in_channels: int,
         out_channels: int,
         size: _size_any_t | None = None,
@@ -208,6 +214,7 @@ class TransDecoder(nn.Module):
         norm: StrOrModule | None = None,
         norm_kwargs: Mapping[str, object] | None = None,
         activation: nn.Module | None = None,
+        conv_bias: torch.Tensor | np.ndarray | float | None = None,
     ) -> nn.Sequential:
         """Get the upsample and convolve block.
 
@@ -237,18 +244,28 @@ class TransDecoder(nn.Module):
                 size=size,
                 scale_factor=scale_factor,
                 mode=up_mode,
-            ),
-            nn.Conv2d(
-                in_channels,
-                out_channels,
-                kernel_size=kernel_size,
-                padding=padding,
-                bias=norm is None,  # Add bias when norm is not None
-                padding_mode=padding_mode,
-            ),
+            )
         ]
+        # Add bias when norm is not None and if bias is not provided
+        instantiate_bias = norm is None and conv_bias is None
 
-        if norm is not None:
+        conv_layer = nn.Conv2d(
+            in_channels,
+            out_channels,
+            kernel_size=kernel_size,
+            padding=padding,
+            bias=instantiate_bias,
+            padding_mode=padding_mode,
+        )
+
+        layers.append(conv_layer)
+
+        # If there is norm then no need to add bias
+        if norm is None:
+            if conv_bias is not None:
+                conv_layer.bias = nn.Parameter(torch.as_tensor(conv_bias).view(-1))
+                print(f"Overridden bias with {conv_bias}")
+        else:
             normalized_shape = out_channels
             if norm == "layer":
                 if size is None:
@@ -258,7 +275,7 @@ class TransDecoder(nn.Module):
                 normalized_shape = [out_channels, size, size]
 
             layers.append(
-                __class__.get_norm_module(
+                cls.get_norm_module(
                     norm,
                     num_channels=normalized_shape,
                     **(norm_kwargs or {}),

@@ -12,6 +12,8 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
     from os import PathLike
 
+    import numpy as np
+
 
 class TransformerSegmentor(nn.Module):
     def __init__(
@@ -27,6 +29,7 @@ class TransformerSegmentor(nn.Module):
         upsampler_num_channels_in_group: int = 64,
         image_size: int | None = None,
         num_output_channels: int = 1,
+        output_bias: torch.Tensor | np.ndarray | float | None = None,
         *args,
         **kwargs,
     ) -> None:
@@ -79,6 +82,7 @@ class TransformerSegmentor(nn.Module):
             num_output_channels=num_output_channels,
             upsampler_norm=upsampler_norm,
             upsampler_num_channels_in_group=upsampler_num_channels_in_group,
+            output_bias=output_bias,
         )
 
     def forward(
