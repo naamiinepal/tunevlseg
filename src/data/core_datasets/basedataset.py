@@ -31,15 +31,15 @@ class BaseImageTextMaskDataset(Dataset, ABC):
         transforms: TransformsType,
         return_tensors: ReturnTensorsType,
         collate_fn: CollateFnType,
-        *args,
-        **kwargs,
+        *tokenizer_loader_args,
+        **tokenizer_loader_kwargs,
     ) -> None:
         self.tasks = tasks
 
         self.tokenizer = self.get_pretrained_tokenizer(
             tokenizer_pretrained_path,
-            *args,
-            **kwargs,
+            *tokenizer_loader_args,
+            **tokenizer_loader_kwargs,
         )
 
         self.transforms = transforms
@@ -128,4 +128,5 @@ class BaseImageTextMaskDataset(Dataset, ABC):
         return len(self.tasks)
 
     @abstractmethod
-    def __getitem__(self, index: int) -> dict[str, Any]: ...
+    def __getitem__(self, index: int) -> dict[str, Any]:
+        ...

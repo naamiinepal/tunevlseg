@@ -1,3 +1,6 @@
+from collections.abc import Mapping
+from typing import Any
+
 import torch
 from torch.nn import functional as F
 from transformers.models.clipseg.modeling_clipseg import (
@@ -9,10 +12,22 @@ from transformers.models.clipseg.modeling_clipseg import (
 
 from src.models.components.hf_clipseg_wrapper import HFCLIPSegWrapper
 
-from .context_learner import ContextLearnerMixin
+from .context_learner import ContextLearner
 
 
-class COOPCLIPSeg(ContextLearnerMixin, HFCLIPSegWrapper):
+class COOPCLIPSeg(HFCLIPSegWrapper):
+    def __init__(
+        self,
+        model_cfg: Mapping[str, Any],
+        context_learner_cfg: Mapping[str, Any],
+    ) -> None:
+        super().__init__(**model_cfg)
+
+        self.context_learner = ContextLearner(
+            embedding_layer=self.model.clip.text_model.embeddings.token_embedding,
+            **context_learner_cfg,
+        )
+
     def embeddings_forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -33,16 +48,11 @@ class COOPCLIPSeg(ContextLearnerMixin, HFCLIPSegWrapper):
         if inputs_embeds is None:
             inputs_embeds = _self.token_embedding(input_ids)
 
-        # Intercept here, now add the learnable contexts
-        first_embed = inputs_embeds[:, :1, :]  # type:ignore
-        rest_embed = inputs_embeds[:, 1:, :]  # type:ignore
+        inputs_embeds = self.context_learner.add_context_to_input_embeddings(
+            inputs_embeds,  # type:ignore
+        )
 
-        inputs_embeds = torch.cat(
-            [first_embed, self.context_vectors, rest_embed],
-            dim=1,
-        )  # type:ignore
-
-        seq_length += self.num_context
+        seq_length += self.context_learner.num_context
 
         if position_ids is None:
             position_ids = _self.position_ids[:, :seq_length]
@@ -90,12 +100,17 @@ class COOPCLIPSeg(ContextLearnerMixin, HFCLIPSegWrapper):
         # CLIPSeg's text model uses causal mask, prepare it here.
         # https://github.com/openai/CLIPSeg/blob/cfcffb90e69f37bf2ff1e988237a0fbe41f33c04/clipseg/model.py#L324
         causal_attention_mask = _create_4d_causal_attention_mask(
-            input_shape,
+            hidden_states.shape[:-1],
             hidden_states.dtype,
             device=hidden_states.device,
         )
+
         # expand attention_mask
         if attention_mask is not None:
+            attention_mask = self.context_learner.update_attention_mask_for_context(
+                attention_mask,
+            )
+
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             attention_mask = _prepare_4d_attention_mask(
                 attention_mask,
@@ -114,6 +129,16 @@ class COOPCLIPSeg(ContextLearnerMixin, HFCLIPSegWrapper):
         last_hidden_state = encoder_outputs[0]
         last_hidden_state = _self.final_layer_norm(last_hidden_state)
 
+        first_pooled_indices = torch.arange(
+            last_hidden_state.shape[0],
+            device=last_hidden_state.device,
+        )
+
+        adjusted_input_ids = input_ids.to(  # type:ignore
+            dtype=torch.int,
+            device=last_hidden_state.device,
+        )
+
         if _self.eos_token_id == 2:
             # The `eos_token_id` was incorrect before PR #24773: Let's keep what have been done here.
             # A CLIPSeg model with such `eos_token_id` in the config can't work correctly with extra new tokens added
@@ -121,30 +146,16 @@ class COOPCLIPSeg(ContextLearnerMixin, HFCLIPSegWrapper):
             # text_embeds.shape = [batch_size, sequence_length, transformer.width]
             # take features from the eot embedding (eot_token is the highest number in each sequence)
             # casting to torch.int for onnx compatibility: argmax doesn't support int64 inputs with opset 14
-            pooled_output = last_hidden_state[
-                torch.arange(
-                    last_hidden_state.shape[0],
-                    device=last_hidden_state.device,
-                ),
-                input_ids.to(dtype=torch.int, device=last_hidden_state.device).argmax(  # type:ignore
-                    dim=-1,
-                ),
-            ]
+            pre_argmax_pooled_indices = adjusted_input_ids
         else:
             # The config gets updated `eos_token_id` from PR #24773 (so the use of exta new tokens is possible)
-            pooled_output = last_hidden_state[
-                torch.arange(
-                    last_hidden_state.shape[0],
-                    device=last_hidden_state.device,
-                ),
-                # We need to get the first position of `eos_token_id` value (`pad_token_ids` might equal to `eos_token_id`)
-                (
-                    input_ids.to(dtype=torch.int, device=last_hidden_state.device)  # type:ignore
-                    == _self.eos_token_id
-                )
-                .int()
-                .argmax(dim=-1),
-            ]
+            # We need to get the first position of `eos_token_id` value (`pad_token_ids` might equal to `eos_token_id`)
+            pre_argmax_pooled_indices = (adjusted_input_ids == _self.eos_token_id).int()
+
+        pooled_output = last_hidden_state[
+            first_pooled_indices,
+            pre_argmax_pooled_indices.argmax(dim=-1) + self.context_learner.num_context,
+        ]
 
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]
@@ -192,7 +203,7 @@ class COOPCLIPSeg(ContextLearnerMixin, HFCLIPSegWrapper):
         )
 
         pooled_output = text_outputs[1]
-        return self.text_projection(pooled_output)
+        return _self.text_projection(pooled_output)
 
     def get_vision_outputs(
         self,
@@ -336,10 +347,14 @@ class COOPCLIPSeg(ContextLearnerMixin, HFCLIPSegWrapper):
             decoder_output=decoder_outputs,
         )
 
-    def forward(self, *, pixel_values: torch.FloatTensor, **kwargs):
-        B, _, H, W = pixel_values.shape
+    def forward(
+        self,
+        text_input: Mapping[str, torch.Tensor],
+        image_input: torch.Tensor,
+    ):
+        B, _, H, W = image_input.shape
 
         # The output is squeezed so it may be (H, W) or (B, H, W)
-        outputs = self.model_forward(pixel_values=pixel_values, **kwargs)
+        outputs = self.model_forward(**text_input, pixel_values=image_input)  # type:ignore
 
         return outputs.logits.view(B, 1, H, W)

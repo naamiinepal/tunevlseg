@@ -9,11 +9,9 @@ from pytorch_lightning import LightningModule
 from torch import nn, optim
 from torchmetrics import Dice, JaccardIndex
 from torchvision.transforms import functional as TF
-from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
-    from pathlib import Path
 
     from pytorch_lightning.loggers import WandbLogger
 
@@ -33,7 +31,6 @@ class ImageTextMaskModule(LightningModule):
         loss_fn: nn.Module,
         optimizer: type[optim.optimizer.Optimizer],
         scheduler: type[optim.lr_scheduler.LRScheduler] | None,
-        tokenizer_name_or_path: str | Path,
         compile: bool,
         task: TaskType,
         threshold: float = 0.5,
@@ -61,10 +58,6 @@ class ImageTextMaskModule(LightningModule):
         self.loss_fn = loss_fn
         self.optimizer = optimizer
         self.scheduler = scheduler
-
-        self.tokenizer: PreTrainedTokenizerBase = AutoTokenizer.from_pretrained(
-            pretrained_model_name_or_path=tokenizer_name_or_path,
-        )
 
         self.activation_fn = nn.Identity() if activation_fn is None else activation_fn
 
@@ -179,23 +172,21 @@ class ImageTextMaskModule(LightningModule):
 
             plot_images = self.get_plot_images(self.normalize_img(selected_images))
 
-            input_ids = batch["input_ids"]
-
-            plot_input_ids = self.decode_input_ids(
-                input_ids[: self.hparams.log_image_num],  # type: ignore
-            )
+            plot_prompts: list[str] = batch["prompt"][: len(selected_images)]
 
             plot_label = self.get_plot_images(targets)
 
-            data = [
-                [img, inp_id, label]
-                for img, inp_id, label in zip(
-                    plot_images,
-                    plot_input_ids,
-                    plot_label,
-                    strict=True,
-                )
-            ]
+            data = list(
+                map(
+                    list,
+                    zip(
+                        plot_images,
+                        plot_prompts,
+                        plot_label,
+                        strict=True,
+                    ),
+                ),
+            )
 
             self.logger.log_table(
                 "val_caption_label",
@@ -213,18 +204,6 @@ class ImageTextMaskModule(LightningModule):
         return map(
             wandb.Image,
             map(TF.to_pil_image, images[: self.hparams.log_image_num].float()),  # type: ignore
-        )
-
-    def decode_input_ids(
-        self,
-        input_ids: torch.Tensor,
-        tokenizer: PreTrainedTokenizerBase | None = None,
-    ) -> list[str]:
-        tokenizer = tokenizer or self.tokenizer
-        return tokenizer.batch_decode(
-            input_ids,
-            skip_special_tokens=True,
-            clean_up_tokenization_spaces=True,
         )
 
     @staticmethod

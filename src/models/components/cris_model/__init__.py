@@ -10,7 +10,7 @@ from .clip import CLIP, build_model
 from .layers import FPN, Projector, TransformerDecoder
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
 
     from torch.serialization import FILE_LIKE
 
@@ -33,7 +33,7 @@ class CRIS(nn.Module):
         freeze_encoder: bool = True,
         cris_pretrain: FILE_LIKE | None = None,
     ) -> None:
-        super().__init__()
+        nn.Module.__init__(self)
 
         self.img_size = img_size
 
@@ -68,27 +68,40 @@ class CRIS(nn.Module):
         clip_model = torch.jit.load(clip_pretrain, map_location="cpu")
         return build_model(clip_model.state_dict(), word_len).float()
 
+    def encode_text(self, text: torch.Tensor) -> torch.Tensor:
+        return self.backbone.encode_text(text)
+
+    def get_pad_mask(
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor | None,
+    ) -> torch.Tensor:
+        return (
+            ~(attention_mask.bool()) if attention_mask is not None else input_ids == 0
+        )
+
     def forward(
         self,
-        pixel_values: torch.Tensor,
-        input_ids: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
+        text_input: Mapping[str, torch.Tensor],
+        image_input: torch.Tensor,
     ):
         """img: b, 3, h, w
         word: b, words
         word_mask: b, words
         mask: b, 1, h, w.
         """
+        input_ids = text_input["input_ids"]
+
+        attention_mask = text_input.get("attention_mask")
+
         # padding mask used in decoder
-        pad_mask = (
-            ~(attention_mask.bool()) if attention_mask is not None else input_ids == 0
-        )
+        pad_mask = self.get_pad_mask(input_ids, attention_mask)
 
         # vis: C3 / C4 / C5
         # input_ids: b, length, 1024
         # state: b, 1024
-        vis = self.backbone.encode_image(pixel_values)
-        input_ids, state = self.backbone.encode_text(input_ids)
+        vis = self.backbone.encode_image(image_input)
+        input_ids, state = self.encode_text(input_ids)
 
         # b, 512, 26, 26 (C4)
         fq = self.neck(vis, state)

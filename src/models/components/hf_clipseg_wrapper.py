@@ -6,6 +6,7 @@ from torch import nn
 from transformers import CLIPSegForImageSegmentation
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
     from os import PathLike
 
     import torch
@@ -51,10 +52,14 @@ class HFCLIPSegWrapper(nn.Module):
 
         return model
 
-    def forward(self, *, pixel_values: torch.FloatTensor, **kwargs):
-        B, _, H, W = pixel_values.shape
+    def forward(
+        self,
+        text_input: Mapping[str, torch.Tensor],
+        image_input: torch.Tensor,
+    ):
+        B, _, H, W = image_input.shape
 
         # The output is squeezed so it may be (H, W) or (B, H, W)
-        outputs = self.model(pixel_values=pixel_values, **kwargs)
+        outputs = self.model(**text_input, pixel_values=image_input)
 
         return outputs.logits.view(B, 1, H, W)

@@ -13,10 +13,7 @@ from .basedataset import BaseImageTextMaskDataset
 
 if TYPE_CHECKING:
     from .basedataset import (
-        CollateFnType,
-        ReturnTensorsType,
         StrOrPath,
-        TransformsType,
     )
 
     PromptType = str | Sequence[str]
@@ -26,17 +23,12 @@ if TYPE_CHECKING:
 class ImageTextMaskDataset(BaseImageTextMaskDataset):
     def __init__(
         self,
+        *,
         image_dir: StrOrPath,
         mask_dir: StrOrPath,
         task_path: StrOrPath,
-        tokenizer_pretrained_path: StrOrPath,
         prompt_index: int,
         override_prompt: str | None = None,
-        transforms: TransformsType | None = None,
-        context_length: int | None = None,
-        return_tensors: ReturnTensorsType = None,
-        collate_fn: CollateFnType = None,
-        *args,
         **kwargs,
     ) -> None:
         tasks = self.get_tasks(task_path)
@@ -48,18 +40,7 @@ class ImageTextMaskDataset(BaseImageTextMaskDataset):
 
         self.override_prompt = override_prompt
 
-        if context_length is not None:
-            kwargs["model_max_length"] = context_length
-
-        super().__init__(
-            *args,
-            tasks=tasks,
-            tokenizer_pretrained_path=tokenizer_pretrained_path,
-            transforms=transforms,
-            return_tensors=return_tensors,
-            collate_fn=collate_fn,
-            **kwargs,
-        )
+        super().__init__(tasks=tasks, **kwargs)
 
     @staticmethod
     def get_tasks(task_path: StrOrPath) -> list[dict[str, str | PromptMappingType]]:
