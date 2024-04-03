@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 from collections import OrderedDict
 from typing import TYPE_CHECKING
 
@@ -464,7 +463,7 @@ class CLIP(nn.Module):
         self.ln_final = LayerNorm(transformer_width)
 
         self.text_projection = nn.Parameter(torch.empty(transformer_width, embed_dim))
-        self.logit_scale = nn.Parameter(torch.ones([]) * math.log(1 / 0.07))
+        self.logit_scale = nn.Parameter(-torch.log(torch.tensor(0.07)))
 
         self.initialize_parameters()
 
@@ -515,22 +514,22 @@ class CLIP(nn.Module):
     def encode_image(self, image: torch.Tensor) -> torch.Tensor:
         return self.visual(image)
 
-    def encode_text(self, text: torch.Tensor) -> torch.Tensor:
+    def encode_text(self, text: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         x = self.token_embedding(text)  # [batch_size, n_ctx, d_model]
 
         x = x + self.positional_embedding[: x.size(1)]
         x = x.permute(1, 0, 2)  # NLD -> LND
         x = self.transformer(x)
         x = x.permute(1, 0, 2)  # LND -> NLD
-        return self.ln_final(x)
+        x = self.ln_final(x)
 
         # x.shape = [batch_size, n_ctx, transformer.width]
         # take features from the eot embedding (eot_token is the highest number in each sequence)
-        # state = x[torch.arange(x.shape[0]), text.argmax(dim=-1)] @ self.text_projection
+        state = x[torch.arange(x.shape[0]), text.argmax(dim=-1)] @ self.text_projection
         # x = x @ self.text_projection
         # state = x[torch.arange(x.shape[0]), text.argmax(dim=-1)]
 
-        # return x, state
+        return x, state
 
     def forward(
         self,

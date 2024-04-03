@@ -1,0 +1,139 @@
+# @package _global_
+
+# to execute this experiment run:
+# python train.py experiment=example
+
+defaults:
+  - override /data: image_text_mask
+  - override /model: coop/cris.yaml
+  - override /callbacks: default
+  - override /trainer: default
+  - override /logger: wandb
+  - override /extras: default
+
+# all parameters below will be merged with parameters from default configurations set above
+# this allows you to overwrite only specified parameters
+
+tags: ["coop", "VLSM", "CRIS"]
+
+seed: 12345
+
+trainer:
+  min_epochs: 10
+  max_epochs: 100
+  gradient_clip_val: null
+  accelerator: auto
+  devices: auto
+  precision: 32
+  log_every_n_steps: 6
+
+model:
+  net:
+    model_cfg:
+      dropout: 0
+  weight_decay: 0.0
+  optimizer:
+    lr: 2.0e-4
+  compile: false # Torch compile works only when CUDA Compat >= 7.0
+  loss_fnword:
+    lambda_dice: 1
+    lambda_ce: 0.2
+
+data:
+  drop_last: false
+  batch_size: 64
+  num_workers: 8
+
+logger:
+  wandb:
+    project: VLSM Prompt Learner
+    name: ${exp_name}
+    tags: ${tags}
+
+############################
+# Additional parameters    #
+############################
+
+ds_name: kvasir_polyp
+dataset_root: ${data_root}/${ds_name}
+
+tokenizer_pretrained_path: CIDAS/clipseg-rd64
+
+exp_name: "model_CRIS_img_${img_size}_b${data.batch_size}_lr${model.optimizer.lr}_p${trainer.precision}"
+
+img_size: 416
+img_mean: [0.48145466, 0.4578275, 0.40821073]
+img_std: [0.26862954, 0.26130258, 0.27577711]
+
+prompt_index: ??
+override_prompt: null
+max_length: 77
+return_tensors: pt
+
+predict: false
+
+# Image pre-processing configs
+
+train_transforms:
+  _target_: albumentations.Compose
+  transforms:
+    - _target_: albumentations.Resize
+      height: ${img_size}
+      width: ${img_size}
+      interpolation: ${import_eval:cv2.INTER_CUBIC}
+    # - _target_: albumentations.Rotate
+    #   limit: 10
+    #   interpolation: ${import_eval:cv2.INTER_CUBIC}
+    #   border_mode: ${import_eval:cv2.BORDER_REPLICATE}
+    #   p: 0.2
+    # - _target_: albumentations.RandomScale
+    #   scale_limit: 0.1
+    #   interpolation: ${import_eval:cv2.INTER_CUBIC}
+    #   p: 0.2
+    # - _target_: albumentations.PadIfNeeded
+    #   min_height: ${img_size}
+    #   min_width: ${img_size}
+    #   border_mode: ${import_eval:cv2.BORDER_REPLICATE}
+    # - _target_: albumentations.CropNonEmptyMaskIfExists
+    #   width: ${img_size}
+    #   height: ${img_size}
+    # - _target_: albumentations.RandomBrightnessContrast
+    #   contrast_limit: 0.1
+    #   brightness_limit: 0.1
+    #   brightness_by_max: false
+    #   p: 0.2
+    - _target_: albumentations.HorizontalFlip
+      p: 0.5
+    - _target_: albumentations.Normalize
+      mean: ${img_mean}
+      std: ${img_std}
+    - _target_: albumentations.pytorch.ToTensorV2
+      transpose_mask: true
+
+_eval_transforms:
+  _target_: albumentations.Compose
+  transforms:
+    - _target_: albumentations.Resize
+      height: ${img_size}
+      width: ${img_size}
+      interpolation: ${import_eval:cv2.INTER_CUBIC}
+    - _target_: albumentations.Normalize
+      mean: ${img_mean}
+      std: ${img_std}
+    - _target_: albumentations.pytorch.ToTensorV2
+      transpose_mask: true
+
+# train_transforms: ${_eval_transforms}
+val_transforms: ${_eval_transforms}
+test_transforms: ${_eval_transforms}
+
+collate_fn:
+  _target_: src.data.components.data_collator.CustomDataCollatorWithPadding
+  tokenizer:
+    _target_: transformers.AutoTokenizer.from_pretrained
+    pretrained_model_name_or_path: ${tokenizer_pretrained_path}
+  padding_keys: ["input_ids", "attention_mask"]
+  padding: true
+  max_length: null
+  pad_to_multiple_of: ${max_length}
+  return_tensors: ${return_tensors}

@@ -128,5 +128,4 @@ class BaseImageTextMaskDataset(Dataset, ABC):
         return len(self.tasks)
 
     @abstractmethod
-    def __getitem__(self, index: int) -> dict[str, Any]:
-        ...
+    def __getitem__(self, index: int) -> dict[str, Any]: ...

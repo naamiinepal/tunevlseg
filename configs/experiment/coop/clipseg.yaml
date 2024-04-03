@@ -5,7 +5,7 @@
 
 defaults:
   - override /data: image_text_mask
-  - override /model: ??
+  - override /model: coop/clipseg.yaml
   - override /callbacks: default
   - override /trainer: default
   - override /logger: wandb
@@ -14,23 +14,23 @@ defaults:
 # all parameters below will be merged with parameters from default configurations set above
 # this allows you to overwrite only specified parameters
 
-tags: ["coop", "VLSM"]
+tags: ["coop", "VLSM", "CLIPSeg"]
 
 seed: 12345
 
 trainer:
   min_epochs: 10
-  max_epochs: 1000
+  max_epochs: 100
   gradient_clip_val: null
   accelerator: auto
   devices: auto
   precision: 32
-  val_check_interval: 0.5
+  log_every_n_steps: 6
 
 model:
   weight_decay: 0.0
-  # optimizer:
-  #   lr: 2.0e-4
+  optimizer:
+    lr: 2.0e-4
   compile: false # Torch compile works only when CUDA Compat >= 7.0
   loss_fn:
     lambda_dice: 1
@@ -79,27 +79,29 @@ train_transforms:
       height: ${img_size}
       width: ${img_size}
       interpolation: ${import_eval:cv2.INTER_CUBIC}
-    - _target_: albumentations.Rotate
-      limit: 10
-      interpolation: ${import_eval:cv2.INTER_CUBIC}
-      border_mode: ${import_eval:cv2.BORDER_REPLICATE}
-      p: 0.2
-    - _target_: albumentations.RandomScale
-      scale_limit: 0.1
-      interpolation: ${import_eval:cv2.INTER_CUBIC}
-      p: 0.2
-    - _target_: albumentations.PadIfNeeded
-      min_height: ${img_size}
-      min_width: ${img_size}
-      border_mode: ${import_eval:cv2.BORDER_REPLICATE}
-    - _target_: albumentations.CropNonEmptyMaskIfExists
-      width: ${img_size}
-      height: ${img_size}
-    - _target_: albumentations.RandomBrightnessContrast
-      contrast_limit: 0.1
-      brightness_limit: 0.1
-      brightness_by_max: false
-      p: 0.2
+    # - _target_: albumentations.Rotate
+    #   limit: 10
+    #   interpolation: ${import_eval:cv2.INTER_CUBIC}
+    #   border_mode: ${import_eval:cv2.BORDER_REPLICATE}
+    #   p: 0.2
+    # - _target_: albumentations.RandomScale
+    #   scale_limit: 0.1
+    #   interpolation: ${import_eval:cv2.INTER_CUBIC}
+    #   p: 0.2
+    # - _target_: albumentations.PadIfNeeded
+    #   min_height: ${img_size}
+    #   min_width: ${img_size}
+    #   border_mode: ${import_eval:cv2.BORDER_REPLICATE}
+    # - _target_: albumentations.CropNonEmptyMaskIfExists
+    #   width: ${img_size}
+    #   height: ${img_size}
+    # - _target_: albumentations.RandomBrightnessContrast
+    #   contrast_limit: 0.1
+    #   brightness_limit: 0.1
+    #   brightness_by_max: false
+    #   p: 0.2
+    - _target_: albumentations.Flip
+      p: 0.5
     - _target_: albumentations.Normalize
       mean: ${img_mean}
       std: ${img_std}
@@ -119,6 +121,7 @@ _eval_transforms:
     - _target_: albumentations.pytorch.ToTensorV2
       transpose_mask: true
 
+# train_transforms: ${_eval_transforms}
 val_transforms: ${_eval_transforms}
 test_transforms: ${_eval_transforms}
 
@@ -129,6 +132,6 @@ collate_fn:
     pretrained_model_name_or_path: ${tokenizer_pretrained_path}
   padding_keys: ["input_ids", "attention_mask"]
   padding: true
-  max_length: ${max_length}
-  pad_to_multiple_of: null
+  max_length: null
+  pad_to_multiple_of: ${max_length}
   return_tensors: ${return_tensors}

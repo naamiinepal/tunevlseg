@@ -7,7 +7,7 @@ train_ds:
   tokenizer_pretrained_path: ${tokenizer_pretrained_path}
   prompt_index: ${prompt_index}
   override_prompt: ${override_prompt}
-  transforms: ${val_transforms}
+  transforms: ${train_transforms}
   model_max_length: ${max_length}
   return_tensors: ${return_tensors}
   collate_fn: ${collate_fn}

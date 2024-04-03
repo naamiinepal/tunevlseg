@@ -20,7 +20,6 @@ class ContextLearner(nn.Module):
         context_initializer: str | None = None,
         tokenizer: PreTrainedTokenizerBase | None = None,
         embedding_layer: Callable[[torch.Tensor], torch.Tensor] | None = None,
-        freeze_all: bool = True,
     ) -> None:
         if context_initializer is None:
             if num_context is None or context_dim is None:
@@ -46,9 +45,6 @@ class ContextLearner(nn.Module):
 
         nn.Module.__init__(self)
 
-        # Freeze all the parameters except the context vectors
-        self.requires_grad_(not freeze_all)
-
         self.num_context = len(context_vectors)
 
         self.context_vectors = nn.Parameter(context_vectors)
@@ -72,6 +68,7 @@ class ContextLearner(nn.Module):
             return_tensors="pt",
             return_attention_mask=False,
             truncation=True,
+            add_special_tokens=False,
         ).input_ids[0]
 
         with torch.no_grad():
@@ -80,16 +77,30 @@ class ContextLearner(nn.Module):
     def add_context_to_input_embeddings(
         self,
         input_embeddings: torch.Tensor,
+        max_length: int | None = None,
     ) -> torch.Tensor:
-        # Intercept and add the learnable contexts
+        # BOS Token
         first_embed = input_embeddings[:, :1, :]
-        rest_embed = input_embeddings[:, 1:, :]
+
+        # Get the embeddings from the middle
+        mid_embed_last_idx = (
+            -1
+            if max_length is None
+            else min(max_length - self.num_context, input_embeddings.size(1)) - 1
+        )
+
+        # If max_length is provided, reduce the embeddings while preserving the EOS token
+        mid_embed = input_embeddings[:, 1:mid_embed_last_idx, :]
+
+        # May or may not be EOS Token, but doing this preserves the last token
+        last_embed = input_embeddings[:, -1:, :]
 
         return torch.cat(
             (
                 first_embed,
                 self.context_vectors.expand(input_embeddings.size(0), -1, -1),
-                rest_embed,
+                mid_embed,
+                last_embed,
             ),
             dim=1,
         )
@@ -98,6 +109,7 @@ class ContextLearner(nn.Module):
         self,
         mask: torch.Tensor,
         constructor: str,
+        max_length: int | None = None,
     ) -> torch.Tensor:
         # Generate attention mask for context vectors
         attention_mask_for_context_vectors = getattr(torch, constructor)(
@@ -108,13 +120,21 @@ class ContextLearner(nn.Module):
         )
 
         # Prepend ones to the attention mask.
-        return torch.cat((attention_mask_for_context_vectors, mask), dim=1)
+        return torch.cat((attention_mask_for_context_vectors, mask), dim=1)[
+            :,
+            :max_length,
+        ]
 
     def update_attention_mask_for_context(
         self,
         attention_mask: torch.Tensor,
+        max_length: int | None = None,
     ) -> torch.Tensor:
-        return self._update_mask_for_context(attention_mask, "ones")
+        return self._update_mask_for_context(attention_mask, "ones", max_length)
 
-    def update_pad_mask_for_context(self, pad_mask: torch.Tensor) -> torch.Tensor:
-        return self._update_mask_for_context(pad_mask, "zeros")
+    def update_pad_mask_for_context(
+        self,
+        pad_mask: torch.Tensor,
+        max_length: int | None = None,
+    ) -> torch.Tensor:
+        return self._update_mask_for_context(pad_mask, "zeros", max_length)

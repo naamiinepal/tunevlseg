@@ -62,13 +62,15 @@ class CRIS(nn.Module):
                 strict=True,
             )
 
+        self.word_len = word_len
+
     @staticmethod
     def get_backbone(clip_pretrain: FILE_LIKE, word_len: int) -> CLIP:
         # Vision & Text Encoder
         clip_model = torch.jit.load(clip_pretrain, map_location="cpu")
         return build_model(clip_model.state_dict(), word_len).float()
 
-    def encode_text(self, text: torch.Tensor) -> torch.Tensor:
+    def encode_text(self, text: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         return self.backbone.encode_text(text)
 
     def get_pad_mask(

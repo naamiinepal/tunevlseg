@@ -20,8 +20,13 @@ class COOPCLIPSeg(HFCLIPSegWrapper):
         self,
         model_cfg: Mapping[str, Any],
         context_learner_cfg: Mapping[str, Any],
+        freeze_all: bool = True,
     ) -> None:
         super().__init__(**model_cfg)
+
+        if freeze_all:
+            self.eval()
+            self.requires_grad_(False)
 
         self.context_learner = ContextLearner(
             embedding_layer=self.model.clip.text_model.embeddings.token_embedding,
@@ -50,6 +55,7 @@ class COOPCLIPSeg(HFCLIPSegWrapper):
 
         inputs_embeds = self.context_learner.add_context_to_input_embeddings(
             inputs_embeds,  # type:ignore
+            self.model.config.text_config.max_position_embeddings,
         )
 
         seq_length += self.context_learner.num_context
@@ -109,6 +115,7 @@ class COOPCLIPSeg(HFCLIPSegWrapper):
         if attention_mask is not None:
             attention_mask = self.context_learner.update_attention_mask_for_context(
                 attention_mask,
+                self.model.config.text_config.max_position_embeddings,
             )
 
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -152,10 +159,12 @@ class COOPCLIPSeg(HFCLIPSegWrapper):
             # We need to get the first position of `eos_token_id` value (`pad_token_ids` might equal to `eos_token_id`)
             pre_argmax_pooled_indices = (adjusted_input_ids == _self.eos_token_id).int()
 
-        pooled_output = last_hidden_state[
-            first_pooled_indices,
+        # Add context number to the argmax indices but limit to the positional embedding size
+        second_indices = torch.minimum(
             pre_argmax_pooled_indices.argmax(dim=-1) + self.context_learner.num_context,
-        ]
+            torch.tensor(self.model.config.text_config.max_position_embeddings - 1),
+        )
+        pooled_output = last_hidden_state[first_pooled_indices, second_indices]
 
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]

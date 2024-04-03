@@ -46,6 +46,9 @@ test: true
 # lightning chooses best weights based on the metric specified in checkpoint callback
 predict: true
 
+# Default path for all of the datasets
+data_root: ${paths.data_dir}
+
 output_masks_dir: ${paths.output_dir}/output_masks
 
 # simply provide checkpoint path to resume training
