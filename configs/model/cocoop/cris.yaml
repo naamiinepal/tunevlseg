@@ -18,7 +18,7 @@ net:
     freeze_encoder: true
     cris_pretrain: pretrain/cris_best_single.pth
   context_learner:
-    _target_: src.models.core_models.coop.context_learner.CoOpContextLearner
+    _target_: src.models.core_models.coop.context_learner.CoCoOpContextLearner
     _partial_: true
     num_context: 4
     context_initializer: null

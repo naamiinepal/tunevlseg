@@ -14,6 +14,8 @@ if TYPE_CHECKING:
 
     from torch.serialization import FILE_LIKE
 
+    from .clip import CLIPImageOutputType
+
 
 class CRIS(nn.Module):
     def __init__(
@@ -63,15 +65,13 @@ class CRIS(nn.Module):
             )
 
         self.word_len = word_len
+        self.word_dim = word_dim
 
     @staticmethod
     def get_backbone(clip_pretrain: FILE_LIKE, word_len: int) -> CLIP:
         # Vision & Text Encoder
         clip_model = torch.jit.load(clip_pretrain, map_location="cpu")
         return build_model(clip_model.state_dict(), word_len).float()
-
-    def encode_text(self, text: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        return self.backbone.encode_text(text)
 
     def get_pad_mask(
         self,
@@ -81,6 +81,18 @@ class CRIS(nn.Module):
         return (
             ~(attention_mask.bool()) if attention_mask is not None else input_ids == 0
         )
+
+    def get_unimodal_outputs(
+        self,
+        image_input: torch.Tensor,
+        input_ids: torch.Tensor,
+    ) -> tuple[CLIPImageOutputType, torch.Tensor, torch.Tensor]:
+        # vis: C3 / C4 / C5
+        # input_ids: b, length, 1024
+        # state: b, 1024
+        vis = self.backbone.encode_image(image_input)
+        input_ids, state = self.backbone.encode_text(input_ids)
+        return vis, input_ids, state
 
     def forward(
         self,
@@ -99,11 +111,7 @@ class CRIS(nn.Module):
         # padding mask used in decoder
         pad_mask = self.get_pad_mask(input_ids, attention_mask)
 
-        # vis: C3 / C4 / C5
-        # input_ids: b, length, 1024
-        # state: b, 1024
-        vis = self.backbone.encode_image(image_input)
-        input_ids, state = self.encode_text(input_ids)
+        vis, input_ids, state = self.get_unimodal_outputs(image_input, input_ids)
 
         # b, 512, 26, 26 (C4)
         fq = self.neck(vis, state)

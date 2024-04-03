@@ -1,18 +1,25 @@
-from collections.abc import Mapping
-from typing import Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
 
 import torch
+from torch import nn
 
 from src.models.components.cris_model import CRIS
 
-from .context_learner import ContextLearner
+from .context_learner import CoCoOpContextLearner, CoOpContextLearner
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from src.models.components.cris_model import CLIPImageOutputType
 
 
 class COOPCRIS(CRIS):
     def __init__(
         self,
         model_cfg: Mapping[str, Any],
-        context_learner_cfg: Mapping[str, Any],
+        context_learner: type[CoOpContextLearner | CoCoOpContextLearner],
         freeze_all: bool = True,
     ) -> None:
         super().__init__(**model_cfg)
@@ -21,10 +28,25 @@ class COOPCRIS(CRIS):
             self.eval()
             self.requires_grad_(False)
 
-        self.context_learner = ContextLearner(
+        self.context_learner = context_learner(
+            visual_dim=self.backbone.visual.output_dim,
+            context_dim=self.word_dim,
             embedding_layer=self.backbone.token_embedding,
-            **context_learner_cfg,
         )
+
+        # CRIS has vision output in the form of (batch_size, output_dim, H, W)
+        # So need to pool it without any learnable params to (batch_size, output_dim)
+        # Since image features is not needed for CoOp, no need for an extra computation
+        self.image_features_pooler_or_identity = (
+            self._pool_4D_tensor
+            if context_learner != CoOpContextLearner
+            else nn.Identity()
+        )
+
+    @staticmethod
+    def _pool_4D_tensor(x: torch.Tensor) -> torch.Tensor:
+        # Leave batch and channel dimension, pooler from other dims
+        return x.mean((2, 3))
 
     def get_pad_mask(
         self,
@@ -40,14 +62,19 @@ class COOPCRIS(CRIS):
             max_length=self.word_len,
         )
 
-    def encode_text(self, text: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def encode_text(
+        self,
+        text: torch.Tensor,
+        image_features: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         _self = self.backbone
 
         x = _self.token_embedding(text)  # [batch_size, n_ctx, d_model]
 
-        x = self.context_learner.add_context_to_input_embeddings(
-            x,
+        x = self.context_learner(
+            input_embeddings=x,
             max_length=self.word_len,
+            image_features=image_features,
         )
 
         x = x + _self.positional_embedding[: x.size(1)]
@@ -70,3 +97,19 @@ class COOPCRIS(CRIS):
         state = pooled_output @ _self.text_projection
 
         return x, state
+
+    def get_unimodal_outputs(
+        self,
+        image_input: torch.Tensor,
+        input_ids: torch.Tensor,
+    ) -> tuple[CLIPImageOutputType, torch.Tensor, torch.Tensor]:
+        # vis: C3 / C4 / C5
+        # input_ids: b, length, 1024
+        # state: b, 1024
+        vis = self.backbone.encode_image(image_input)
+
+        # Get image features from the last element
+        image_features = self.image_features_pooler_or_identity(vis[-1])
+
+        input_ids, state = self.encode_text(input_ids, image_features)
+        return vis, input_ids, state

@@ -1,5 +1,6 @@
-from collections.abc import Mapping
-from typing import Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
 
 import torch
 from torch.nn import functional as F
@@ -12,14 +13,17 @@ from transformers.models.clipseg.modeling_clipseg import (
 
 from src.models.components.hf_clipseg_wrapper import HFCLIPSegWrapper
 
-from .context_learner import ContextLearner
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from .context_learner import CoCoOpContextLearner, CoOpContextLearner
 
 
 class COOPCLIPSeg(HFCLIPSegWrapper):
     def __init__(
         self,
         model_cfg: Mapping[str, Any],
-        context_learner_cfg: Mapping[str, Any],
+        context_learner: type[CoOpContextLearner | CoCoOpContextLearner],
         freeze_all: bool = True,
     ) -> None:
         super().__init__(**model_cfg)
@@ -28,9 +32,10 @@ class COOPCLIPSeg(HFCLIPSegWrapper):
             self.eval()
             self.requires_grad_(False)
 
-        self.context_learner = ContextLearner(
+        self.context_learner = context_learner(
+            visual_dim=self.model.config.vision_config.hidden_size,
+            context_dim=self.model.config.text_config.hidden_size,
             embedding_layer=self.model.clip.text_model.embeddings.token_embedding,
-            **context_learner_cfg,
         )
 
     def embeddings_forward(
@@ -38,6 +43,7 @@ class COOPCLIPSeg(HFCLIPSegWrapper):
         input_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
+        image_features: torch.Tensor | None = None,
     ) -> torch.Tensor:
         _self = self.model.clip.text_model.embeddings
 
@@ -53,9 +59,10 @@ class COOPCLIPSeg(HFCLIPSegWrapper):
         if inputs_embeds is None:
             inputs_embeds = _self.token_embedding(input_ids)
 
-        inputs_embeds = self.context_learner.add_context_to_input_embeddings(
-            inputs_embeds,  # type:ignore
-            self.model.config.text_config.max_position_embeddings,
+        inputs_embeds = self.context_learner(
+            input_embeddings=inputs_embeds,
+            max_length=self.model.config.text_config.max_position_embeddings,
+            image_features=image_features,
         )
 
         seq_length += self.context_learner.num_context
@@ -74,6 +81,7 @@ class COOPCLIPSeg(HFCLIPSegWrapper):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
+        image_features: torch.Tensor | None = None,
     ) -> tuple | BaseModelOutputWithPooling:
         _self = self.model.clip.text_model
 
@@ -101,6 +109,7 @@ class COOPCLIPSeg(HFCLIPSegWrapper):
         hidden_states = self.embeddings_forward(
             input_ids=input_ids,
             position_ids=position_ids,
+            image_features=image_features,
         )
 
         # CLIPSeg's text model uses causal mask, prepare it here.
@@ -184,6 +193,7 @@ class COOPCLIPSeg(HFCLIPSegWrapper):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
+        image_features: torch.Tensor | None = None,
     ) -> torch.FloatTensor:
         _self = self.model.clip
 
@@ -209,6 +219,7 @@ class COOPCLIPSeg(HFCLIPSegWrapper):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            image_features=image_features,
         )
 
         pooled_output = text_outputs[1]
@@ -254,6 +265,7 @@ class COOPCLIPSeg(HFCLIPSegWrapper):
         attention_mask: torch.Tensor | None,
         conditional_pixel_values: torch.FloatTensor | None,
         position_ids: torch.LongTensor | None,
+        image_features: torch.Tensor | None = None,
     ):
         _self = self.model
         if conditional_embeddings is None:
@@ -267,6 +279,7 @@ class COOPCLIPSeg(HFCLIPSegWrapper):
                     input_ids,
                     attention_mask=attention_mask,
                     position_ids=position_ids,
+                    image_features=image_features,
                 )
 
             if conditional_pixel_values is not None:
@@ -329,6 +342,7 @@ class COOPCLIPSeg(HFCLIPSegWrapper):
             attention_mask=attention_mask,
             conditional_pixel_values=conditional_pixel_values,
             position_ids=position_ids,
+            image_features=pooled_output,
         )
 
         # step 3: forward both the pooled output and the activations through the lightweight decoder to predict masks

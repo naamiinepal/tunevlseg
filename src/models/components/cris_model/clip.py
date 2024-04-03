@@ -12,6 +12,8 @@ if TYPE_CHECKING:
 
     from torch.nn.common_types import _size_2_t, _size_any_t
 
+    CLIPImageOutputType = tuple[torch.Tensor, torch.Tensor, torch.Tensor] | torch.Tensor
+
 
 class Bottleneck(nn.Module):
     expansion = 4
@@ -511,7 +513,7 @@ class CLIP(nn.Module):
         mask.triu_(1)  # zero out the lower diagonal
         return mask
 
-    def encode_image(self, image: torch.Tensor) -> torch.Tensor:
+    def encode_image(self, image: torch.Tensor) -> CLIPImageOutputType:
         return self.visual(image)
 
     def encode_text(self, text: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -531,25 +533,26 @@ class CLIP(nn.Module):
 
         return x, state
 
-    def forward(
-        self,
-        image: torch.Tensor,
-        text: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        image_features = self.encode_image(image)
-        text_features = self.encode_text(text)
-
-        # normalized features
-        image_features = image_features / image_features.norm(dim=-1, keepdim=True)
-        text_features = text_features / text_features.norm(dim=-1, keepdim=True)
-
-        # cosine similarity as logits
-        logit_scale = self.logit_scale.exp()
-        logits_per_image = logit_scale * image_features @ text_features.t()
-        logits_per_text = logits_per_image.t()
-
-        # shape = [global_batch_size, global_batch_size]
-        return logits_per_image, logits_per_text
+    # def forward(
+    #     self,
+    #     image: torch.Tensor,
+    #     text: torch.Tensor,
+    # ) -> tuple[torch.Tensor, torch.Tensor]:
+    #     image_features = self.encode_image(image)
+    #     text_features = self.encode_text(text)
+    #
+    #     # normalized features
+    #     image_features = image_features / image_features.norm(dim=-1, keepdim=True)
+    #     text_features = text_features / text_features.norm(dim=-1, keepdim=True)
+    #
+    #     # cosine similarity as logits
+    #     logit_scale = self.logit_scale.exp()
+    #     logits_per_image = logit_scale * image_features @ text_features.t()
+    #     logits_per_text = logits_per_image.t()
+    #
+    #     # shape = [global_batch_size, global_batch_size]
+    #     return logits_per_image, logits_per_text
+    #
 
 
 def convert_weights(model: nn.Module) -> None:

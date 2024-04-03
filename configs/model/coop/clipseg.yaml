@@ -6,9 +6,10 @@ net:
     pretrained_model_name_or_path: ${model_pretrained_path}
     freeze_encoder: false
     freeze_decoder: false
-  context_learner_cfg:
+  context_learner:
+    _target_: src.models.core_models.coop.context_learner.CoOpContextLearner
+    _partial_: true
     num_context: 4
-    context_dim: 512
     context_initializer: null
     tokenizer:
       _target_: transformers.AutoTokenizer.from_pretrained
