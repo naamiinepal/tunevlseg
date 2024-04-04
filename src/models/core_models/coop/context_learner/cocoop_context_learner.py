@@ -12,6 +12,7 @@ class CoCoOpContextLearner(CoOpContextLearner):
         intermediate_dim: int | None = None,
         reduction_factor: float | None = 16,
         norm_image_features: bool = True,
+        dropout_prob: float = 0.0,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -21,6 +22,7 @@ class CoCoOpContextLearner(CoOpContextLearner):
             context_dim=self.context_vectors.size(1),
             intermediate_dim=intermediate_dim,
             reduction_factor=reduction_factor,
+            dropout_prob=dropout_prob,
         )
 
         self.image_features_normalizer_or_identity = (
@@ -41,6 +43,7 @@ class CoCoOpContextLearner(CoOpContextLearner):
         context_dim: int,
         intermediate_dim: int | None,
         reduction_factor: float | None,
+        dropout_prob: float,
     ) -> nn.Sequential:
         if intermediate_dim is None:
             if reduction_factor is None:
@@ -52,9 +55,14 @@ class CoCoOpContextLearner(CoOpContextLearner):
             intermediate_dim = int(visual_dim / reduction_factor)
 
         return nn.Sequential(
+            nn.Dropout(p=dropout_prob, inplace=True),
             nn.Linear(visual_dim, intermediate_dim),
             nn.ReLU(inplace=True),
-            nn.Linear(intermediate_dim, context_dim),
+            nn.Linear(intermediate_dim, intermediate_dim),
+            nn.ReLU(inplace=True),
+            nn.Linear(
+                intermediate_dim, context_dim, bias=False
+            ),  # Since we are adding to learnable context vectors, no need for bias
         )
 
     def forward(
