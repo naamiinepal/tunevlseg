@@ -294,7 +294,6 @@ class ResidualAttentionBlock(nn.Module):
         self,
         d_model: int,
         n_head: int,
-        attn_mask: torch.Tensor | None = None,
     ) -> None:
         super().__init__()
 
@@ -310,18 +309,12 @@ class ResidualAttentionBlock(nn.Module):
             ),
         )
         self.ln_2 = LayerNorm(d_model)
-        self.attn_mask = attn_mask
 
-    def attention(self, x: torch.Tensor) -> torch.Tensor:
-        self.attn_mask = (
-            self.attn_mask.to(dtype=x.dtype, device=x.device)
-            if self.attn_mask is not None
-            else None
-        )
-        return self.attn(x, x, x, need_weights=False, attn_mask=self.attn_mask)[0]
+    def attention(self, x: torch.Tensor, *args, **kwargs) -> torch.Tensor:
+        return self.attn(x, x, x, *args, need_weights=False, **kwargs)[0]
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = x + self.attention(self.ln_1(x))
+    def forward(self, x: torch.Tensor, *args, **kwargs) -> torch.Tensor:
+        x = x + self.attention(self.ln_1(x), *args, **kwargs)
         return x + self.mlp(self.ln_2(x))
 
 
@@ -331,17 +324,24 @@ class Transformer(nn.Module):
         width: int,
         layers: int,
         heads: int,
-        attn_mask: torch.Tensor | None = None,
     ) -> None:
         super().__init__()
         self.width = width
         self.layers = layers
-        self.resblocks = nn.Sequential(
-            *(ResidualAttentionBlock(width, heads, attn_mask) for _ in range(layers)),
+        self.resblocks = nn.ModuleList(
+            ResidualAttentionBlock(width, heads) for _ in range(layers)
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.resblocks(x)
+    def forward(self, x: torch.Tensor, *args, **kwargs) -> torch.Tensor:
+        seq_length = x.size(0)
+        attn_mask = torch.triu(
+            torch.ones(seq_length, seq_length, dtype=torch.bool), diagonal=1
+        )
+
+        for block in self.resblocks:
+            x = block(x, *args, **kwargs, attn_mask=attn_mask)
+
+        return x
 
 
 class VisionTransformer(nn.Module):
@@ -415,7 +415,6 @@ class CLIP(nn.Module):
         vision_patch_size: int | None,
         # text
         context_length: int,
-        txt_length: int,
         vocab_size: int,
         transformer_width: int,
         transformer_heads: int,
@@ -454,7 +453,6 @@ class CLIP(nn.Module):
             width=transformer_width,
             layers=transformer_layers,
             heads=transformer_heads,
-            attn_mask=self.build_attention_mask(txt_length),
         )
 
         self.vocab_size = vocab_size
@@ -491,11 +489,9 @@ class CLIP(nn.Module):
                     if name.endswith("bn3.weight"):
                         nn.init.zeros_(param)
 
-        proj_std = (self.transformer.width**-0.5) * (
-            (2 * self.transformer.layers) ** -0.5
-        )
         attn_std = self.transformer.width**-0.5
-        fc_std = (2 * self.transformer.width) ** -0.5
+        proj_std = attn_std * ((2 * self.transformer.layers) ** -0.5)
+        fc_std = 2**-0.5 * attn_std
         for block in self.transformer.resblocks:
             nn.init.normal_(block.attn.in_proj_weight, std=attn_std)
             nn.init.normal_(block.attn.out_proj.weight, std=proj_std)
@@ -503,25 +499,19 @@ class CLIP(nn.Module):
             nn.init.normal_(block.mlp.c_proj.weight, std=proj_std)
 
         if self.text_projection is not None:
-            nn.init.normal_(self.text_projection, std=self.transformer.width**-0.5)
-
-    def build_attention_mask(self, context_length: int) -> torch.Tensor:
-        # lazily create causal attention mask, with full attention between the vision tokens
-        # pytorch uses additive attention mask; fill with -inf
-        mask = torch.empty(context_length, context_length)
-        mask.fill_(float("-inf"))
-        mask.triu_(1)  # zero out the lower diagonal
-        return mask
+            nn.init.normal_(self.text_projection, std=attn_std)
 
     def encode_image(self, image: torch.Tensor) -> CLIPImageOutputType:
         return self.visual(image)
 
-    def encode_text(self, text: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def encode_text(
+        self, text: torch.Tensor, *args, **kwargs
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         x = self.token_embedding(text)  # [batch_size, n_ctx, d_model]
 
         x = x + self.positional_embedding[: x.size(1)]
         x = x.permute(1, 0, 2)  # NLD -> LND
-        x = self.transformer(x)
+        x = self.transformer(x, *args, **kwargs)
         x = x.permute(1, 0, 2)  # LND -> NLD
         x = self.ln_final(x)
 
@@ -583,7 +573,7 @@ def convert_weights(model: nn.Module) -> None:
     model.apply(_convert_weights_to_fp16)
 
 
-def build_model(state_dict: MutableMapping[str, torch.Tensor], txt_length: int) -> CLIP:
+def build_model(state_dict: MutableMapping[str, torch.Tensor]) -> CLIP:
     if "visual.proj" in state_dict:
         vision_width = state_dict["visual.conv1.weight"].shape[0]
         vision_layers = len(
@@ -640,7 +630,6 @@ def build_model(state_dict: MutableMapping[str, torch.Tensor], txt_length: int) 
         vision_width,
         vision_patch_size,
         context_length,
-        txt_length,
         vocab_size,
         transformer_width,
         transformer_heads,

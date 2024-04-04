@@ -4,7 +4,6 @@ net:
   _target_: src.models.core_models.coop.COOPCRIS
   model_cfg:
     clip_pretrain: pretrain/RN50.pt
-    word_len: ${max_length}
     fpn_in: [512, 1024, 1024]
     fpn_out: [256, 512, 1024]
     vis_dim: 512

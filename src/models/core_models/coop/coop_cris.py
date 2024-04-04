@@ -59,7 +59,7 @@ class COOPCRIS(CRIS):
         # Expand the mask to include context
         return self.context_learner.update_pad_mask_for_context(
             pad_mask=pad_mask,
-            max_length=self.word_len,
+            max_length=self.max_length,
         )
 
     def encode_text(
@@ -73,7 +73,7 @@ class COOPCRIS(CRIS):
 
         x = self.context_learner(
             input_embeddings=x,
-            max_length=self.word_len,
+            max_length=self.max_length,
             image_features=image_features,
         )
 
@@ -89,7 +89,7 @@ class COOPCRIS(CRIS):
         # Add indices by context number but clip to the word length
         second_indices = torch.minimum(
             text.argmax(dim=-1) + self.context_learner.num_context,
-            torch.tensor(self.word_len - 1),
+            torch.tensor(self.max_length - 1),
         )
 
         pooled_output = x[torch.arange(x.shape[0]), second_indices]
@@ -102,6 +102,8 @@ class COOPCRIS(CRIS):
         self,
         image_input: torch.Tensor,
         input_ids: torch.Tensor,
+        *args,
+        **kwargs,
     ) -> tuple[CLIPImageOutputType, torch.Tensor, torch.Tensor]:
         # vis: C3 / C4 / C5
         # input_ids: b, length, 1024
@@ -111,5 +113,5 @@ class COOPCRIS(CRIS):
         # Get image features from the last element
         image_features = self.image_features_pooler_or_identity(vis[-1])
 
-        input_ids, state = self.encode_text(input_ids, image_features)
+        input_ids, state = self.encode_text(input_ids, image_features, *args, **kwargs)
         return vis, input_ids, state

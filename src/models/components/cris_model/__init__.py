@@ -18,10 +18,11 @@ if TYPE_CHECKING:
 
 
 class CRIS(nn.Module):
+    max_length = 77
+
     def __init__(
         self,
         clip_pretrain: FILE_LIKE,
-        word_len: int,
         fpn_in: Sequence[int],
         fpn_out: Sequence[int],
         vis_dim: int,
@@ -39,7 +40,7 @@ class CRIS(nn.Module):
 
         self.img_size = img_size
 
-        self.backbone = self.get_backbone(clip_pretrain, word_len)
+        self.backbone = self.get_backbone(clip_pretrain)
         self.backbone.requires_grad_(not freeze_encoder)
 
         # Multi-Modal FPN
@@ -64,14 +65,13 @@ class CRIS(nn.Module):
                 strict=True,
             )
 
-        self.word_len = word_len
         self.word_dim = word_dim
 
     @staticmethod
-    def get_backbone(clip_pretrain: FILE_LIKE, word_len: int) -> CLIP:
+    def get_backbone(clip_pretrain: FILE_LIKE) -> CLIP:
         # Vision & Text Encoder
         clip_model = torch.jit.load(clip_pretrain, map_location="cpu")
-        return build_model(clip_model.state_dict(), word_len).float()
+        return build_model(clip_model.state_dict()).float()
 
     def get_pad_mask(
         self,
@@ -86,12 +86,14 @@ class CRIS(nn.Module):
         self,
         image_input: torch.Tensor,
         input_ids: torch.Tensor,
+        *args,
+        **kwargs,
     ) -> tuple[CLIPImageOutputType, torch.Tensor, torch.Tensor]:
         # vis: C3 / C4 / C5
         # input_ids: b, length, 1024
         # state: b, 1024
         vis = self.backbone.encode_image(image_input)
-        input_ids, state = self.backbone.encode_text(input_ids)
+        input_ids, state = self.backbone.encode_text(input_ids, *args, **kwargs)
         return vis, input_ids, state
 
     def forward(
@@ -111,7 +113,9 @@ class CRIS(nn.Module):
         # padding mask used in decoder
         pad_mask = self.get_pad_mask(input_ids, attention_mask)
 
-        vis, input_ids, state = self.get_unimodal_outputs(image_input, input_ids)
+        vis, input_ids, state = self.get_unimodal_outputs(
+            image_input, input_ids, key_padding_mask=pad_mask
+        )
 
         # b, 512, 26, 26 (C4)
         fq = self.neck(vis, state)
