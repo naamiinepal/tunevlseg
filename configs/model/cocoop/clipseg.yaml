@@ -9,8 +9,10 @@ net:
   context_learner:
     _target_: src.models.core_models.coop.context_learner.CoCoOpContextLearner
     _partial_: true
+    intermediate_dim: 32
+    reduction_factor: 16
+    norm_image_features: True
     num_context: 4
-    context_dim: 512
     context_initializer: null
     tokenizer:
       _target_: transformers.AutoTokenizer.from_pretrained

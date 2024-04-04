@@ -33,7 +33,7 @@ class COOPCLIPSeg(HFCLIPSegWrapper):
             self.requires_grad_(False)
 
         self.context_learner = context_learner(
-            visual_dim=self.model.config.vision_config.hidden_size,
+            visual_dim=self.model.config.projection_dim,
             context_dim=self.model.config.text_config.hidden_size,
             embedding_layer=self.model.clip.text_model.embeddings.token_embedding,
         )

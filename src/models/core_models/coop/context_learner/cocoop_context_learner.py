@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 
-from . import CoOpContextLearner
+from .coop_context_learner import CoOpContextLearner
 
 
 class CoCoOpContextLearner(CoOpContextLearner):

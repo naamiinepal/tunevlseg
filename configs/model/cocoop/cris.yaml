@@ -20,6 +20,9 @@ net:
   context_learner:
     _target_: src.models.core_models.coop.context_learner.CoCoOpContextLearner
     _partial_: true
+    intermediate_dim: 20
+    reduction_factor: 16
+    norm_image_features: True
     num_context: 4
     context_initializer: null
     tokenizer:
