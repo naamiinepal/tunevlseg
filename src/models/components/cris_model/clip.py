@@ -335,7 +335,8 @@ class Transformer(nn.Module):
     def forward(self, x: torch.Tensor, *args, **kwargs) -> torch.Tensor:
         seq_length = x.size(0)
         attn_mask = torch.triu(
-            torch.ones(seq_length, seq_length, dtype=torch.bool), diagonal=1
+            torch.ones(seq_length, seq_length, device=x.device, dtype=torch.bool),
+            diagonal=1,
         )
 
         for block in self.resblocks:
@@ -505,7 +506,10 @@ class CLIP(nn.Module):
         return self.visual(image)
 
     def encode_text(
-        self, text: torch.Tensor, *args, **kwargs
+        self,
+        text: torch.Tensor,
+        *args,
+        **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         x = self.token_embedding(text)  # [batch_size, n_ctx, d_model]
 

@@ -61,7 +61,9 @@ class CoCoOpContextLearner(CoOpContextLearner):
             nn.Linear(intermediate_dim, intermediate_dim),
             nn.ReLU(inplace=True),
             nn.Linear(
-                intermediate_dim, context_dim, bias=False
+                intermediate_dim,
+                context_dim,
+                bias=False,
             ),  # Since we are adding to learnable context vectors, no need for bias
         )
 

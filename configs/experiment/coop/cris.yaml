@@ -67,7 +67,7 @@ img_std: [0.26862954, 0.26130258, 0.27577711]
 
 prompt_index: ??
 override_prompt: null
-max_length: 77
+max_length: null
 return_tensors: pt
 
 predict: false

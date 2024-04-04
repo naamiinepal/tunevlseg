@@ -66,6 +66,8 @@ class COOPCRIS(CRIS):
         self,
         text: torch.Tensor,
         image_features: torch.Tensor | None = None,
+        *args,
+        **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         _self = self.backbone
 
@@ -79,7 +81,7 @@ class COOPCRIS(CRIS):
 
         x = x + _self.positional_embedding[: x.size(1)]
         x = x.permute(1, 0, 2)  # NLD -> LND
-        x = _self.transformer(x)
+        x = _self.transformer(x, *args, **kwargs)
         x = x.permute(1, 0, 2)  # LND -> NLD
         x = _self.ln_final(x)
 
