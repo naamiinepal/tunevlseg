@@ -54,18 +54,35 @@ class CoCoOpContextLearner(CoOpContextLearner):
 
             intermediate_dim = int(visual_dim / reduction_factor)
 
-        return nn.Sequential(
+        net = nn.Sequential(
             nn.Dropout(p=dropout_prob, inplace=True),
-            nn.Linear(visual_dim, intermediate_dim),
+            nn.Linear(
+                visual_dim, intermediate_dim, bias=False
+            ),  # disable bias when using norm
+            nn.LayerNorm(intermediate_dim),
             nn.ReLU(inplace=True),
-            nn.Linear(intermediate_dim, intermediate_dim),
+            nn.Linear(
+                intermediate_dim, intermediate_dim, bias=False
+            ),  # disable bias when using norm
+            nn.LayerNorm(intermediate_dim),
             nn.ReLU(inplace=True),
             nn.Linear(
                 intermediate_dim,
                 context_dim,
                 bias=False,
+            ),  # disable bias when using norm
+            nn.LayerNorm(
+                context_dim, bias=False
             ),  # Since we are adding to learnable context vectors, no need for bias
         )
+
+        # For every Linear layer, except the last one, init using kaiming_normal
+        # This would increase the std of the existing layers weights
+        linear_layers = tuple(layer for layer in net if isinstance(layer, nn.Linear))
+        for layer in linear_layers[:-1]:
+            nn.init.kaiming_normal_(layer.weight.data, nonlinearity="relu")
+
+        return net
 
     def forward(
         self,
