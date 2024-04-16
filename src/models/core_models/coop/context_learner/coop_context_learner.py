@@ -6,7 +6,7 @@ import torch
 from torch import nn
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Sequence
 
     from transformers import PreTrainedTokenizerBase
 
@@ -53,10 +53,7 @@ class CoOpContextLearner(nn.Module):
                 msg = "`num_context` and `context_dim` must be specified if `context_initializer` is None"
                 raise ValueError(msg)
 
-            return self.init_context_vectors(
-                num_context=num_context,
-                context_dim=context_dim,
-            )
+            return self.init_context_vectors((num_context, context_dim))
 
         if tokenizer is None or embedding_layer is None:
             msg = "If `context_initializer` is not None, `tokenizer` and `embedding_layer` must be specified"
@@ -66,19 +63,19 @@ class CoOpContextLearner(nn.Module):
             context_initializer,
             embedding_layer,
             tokenizer,
-        )
+        )[0]
 
     @staticmethod
-    def init_context_vectors(num_context: int, context_dim: int) -> torch.Tensor:
+    def init_context_vectors(shape: Sequence[int]) -> torch.Tensor:
         # Copied from Context Optimization (CoOp).
         # Learning to Prompt for Vision-Language Models
-        context_vectors = torch.empty(num_context, context_dim)
+        context_vectors = torch.empty(shape)
         nn.init.normal_(context_vectors, std=0.02)
         return context_vectors
 
     @staticmethod
     def get_context_vectors_from_initializer(
-        context_initializer: str,
+        context_initializer: str | list[str],
         embedding_layer: Callable[[torch.Tensor], torch.Tensor],
         tokenizer: PreTrainedTokenizerBase,
     ) -> torch.Tensor:
@@ -88,7 +85,7 @@ class CoOpContextLearner(nn.Module):
             return_attention_mask=False,
             truncation=True,
             add_special_tokens=False,
-        ).input_ids[0]
+        ).input_ids
 
         with torch.no_grad():
             return embedding_layer(input_ids)
