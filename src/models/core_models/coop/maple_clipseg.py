@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING, Any
 
 import torch
@@ -7,6 +8,7 @@ from torch.nn import functional as F
 from transformers.modeling_outputs import BaseModelOutput
 from transformers.models.clipseg.modeling_clipseg import (
     BaseModelOutputWithPooling,
+    CLIPSegDecoderOutput,
     CLIPSegImageSegmentationOutput,
     _create_4d_causal_attention_mask,
     _prepare_4d_attention_mask,
@@ -15,9 +17,9 @@ from transformers.models.clipseg.modeling_clipseg import (
 from src.models.components.hf_clipseg_wrapper import HFCLIPSegWrapper
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Mapping, Sequence
+    from collections.abc import Mapping, Sequence
 
-    from .context_learner.maple_context_learner import MapleContextLearner
+    from .context_learner import MapleContextLearner
 
 
 class MapleCLIPSeg(HFCLIPSegWrapper):
@@ -66,7 +68,7 @@ class MapleCLIPSeg(HFCLIPSegWrapper):
         inputs_embeds = self.context_learner(
             input_embeddings=inputs_embeds,
             max_length=self.model.config.text_config.max_position_embeddings,
-            context_vectors=self.context_vectors[0].expand(
+            context_vectors=self.context_learner.context_vectors[0].expand(
                 inputs_embeds.size(0),  # type:ignore
                 -1,
                 -1,
@@ -166,7 +168,8 @@ class MapleCLIPSeg(HFCLIPSegWrapper):
 
             if idx < self.context_learner.prompt_depth:
                 # Overwrite the prompts skipping the BOS Token till the prompt depth
-                hidden_states[:, -self.context_learner.num_context :] = (
+                # TODO: May be add? This would enable early fusion of the encoders
+                hidden_states[:, 1 : self.context_learner.num_context + 1] = (
                     self.context_learner.context_vectors[
                         idx
                     ].expand(hidden_states.size(0), -1, -1)
@@ -309,8 +312,9 @@ class MapleCLIPSeg(HFCLIPSegWrapper):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, ...]]:
+    ) -> torch.FloatTensor:
         _self = self.model.clip
 
         # Use CLIPSEG model's config for some fields (if specified) instead of those of vision & text components.
@@ -323,21 +327,18 @@ class MapleCLIPSeg(HFCLIPSegWrapper):
             return_dict if return_dict is not None else _self.config.use_return_dict
         )
 
-        # (last_hidden_state, pooled_output) + encoder_outputs[1:]
-        last_hidden_state, pooled_output, *previous_text_outputs = (
-            self.text_model_forward(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                position_ids=position_ids,
-                output_attentions=output_attentions,
-                output_hidden_states=True,
-                return_dict=return_dict,
-            )
+        text_outputs = self.text_model_forward(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
 
-        text_projection = _self.text_projection(pooled_output)
+        pooled_output = text_outputs[1]
 
-        return text_projection, tuple(last_hidden_state, *previous_text_outputs)
+        return _self.text_projection(pooled_output)
 
     def vision_transformer_model_forward(
         self,
@@ -379,37 +380,41 @@ class MapleCLIPSeg(HFCLIPSegWrapper):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 
         """
+        _self = self.model.clip.vision_model.encoder
         output_attentions = (
             output_attentions
             if output_attentions is not None
-            else self.config.output_attentions
+            else _self.config.output_attentions
         )
         output_hidden_states = (
             output_hidden_states
             if output_hidden_states is not None
-            else self.config.output_hidden_states
+            else _self.config.output_hidden_states
         )
         return_dict = (
-            return_dict if return_dict is not None else self.config.use_return_dict
+            return_dict if return_dict is not None else _self.config.use_return_dict
         )
 
         encoder_states = []
         all_attentions = []
 
         hidden_states = inputs_embeds
-        for idx, encoder_layer in enumerate(self.layers, 1):
+
+        max_layer_idx = max(self.model.extract_layers)
+
+        for idx, encoder_layer in enumerate(_self.layers, 1):
             if output_hidden_states:
                 encoder_states.append(hidden_states)
 
             layer_outputs = (
-                self._gradient_checkpointing_func(
+                _self._gradient_checkpointing_func(
                     encoder_layer.__call__,
                     hidden_states,
                     attention_mask,
                     causal_attention_mask,
                     output_attentions,
                 )
-                if self.gradient_checkpointing and self.training
+                if _self.gradient_checkpointing and _self.training
                 else encoder_layer(
                     hidden_states,
                     attention_mask,
@@ -422,12 +427,17 @@ class MapleCLIPSeg(HFCLIPSegWrapper):
 
             if idx < self.context_learner.prompt_depth:
                 # Overwrite the prompts skipping the BOS Token till the prompt depth
+                # TODO: May be add? This would enable early fusion of the encoders
                 hidden_states[:, -self.context_learner.num_context :] = (
                     visual_context_vectors[idx].expand(hidden_states.size(0), -1, -1)
                 )
 
             if output_attentions:
                 all_attentions.append(layer_outputs[1])
+
+            # No need to run the vision transformer for more layers
+            if idx > max_layer_idx:
+                break
 
         encoder_states = (
             (*encoder_states, hidden_states) if output_hidden_states else None
@@ -450,11 +460,10 @@ class MapleCLIPSeg(HFCLIPSegWrapper):
     def vision_model_forward(
         self,
         pixel_values: torch.FloatTensor,
-        text_intermediate_states: Iterable[torch.Tensor],
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutput:
         _self = self.model.clip.vision_model
 
         output_attentions = (
@@ -475,36 +484,37 @@ class MapleCLIPSeg(HFCLIPSegWrapper):
         hidden_states = _self.embeddings(pixel_values)
 
         # Tuple of tensors of shape (batch_size, num_context, hidden_size)
-        visual_context_vectors = self.context_learner.generate_visual_contexts(
-            text_intermediate_states,
-        )
+        visual_context_vectors = self.context_learner.generate_visual_contexts()
 
         # Add te context to the hidden states at the last position
+        # shape: (num_context, context_dim)
         first_context_vector = visual_context_vectors[0]
 
         # Concat the context vector with the hidden states
-        hidden_states = torch.cat((hidden_states, first_context_vector), dim=1)
+        hidden_states = torch.cat(
+            (hidden_states, first_context_vector.expand(hidden_states.size(0), -1, -1)),
+            dim=1,
+        )
 
+        # Concat before the layernorm, concating after results in unstable training
         hidden_states = _self.pre_layrnorm(hidden_states)
 
         encoder_outputs = self.vision_transformer_model_forward(
-            inputs_embeds=hidden_states,
+            inputs_embeds=hidden_states,  # type:ignore
             visual_context_vectors=visual_context_vectors,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
 
-        last_hidden_state = encoder_outputs[0]
-        pooled_output = last_hidden_state[:, 0, :]
-        pooled_output = _self.post_layernorm(pooled_output)
+        # last_hidden_state = encoder_outputs[0]
+        # pooled_output = last_hidden_state[:, 0, :]
+        # pooled_output = _self.post_layernorm(pooled_output)
 
         if not return_dict:
-            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
+            return encoder_outputs
 
-        return BaseModelOutputWithPooling(
-            last_hidden_state=last_hidden_state,
-            pooler_output=pooled_output,
+        return BaseModelOutput(
             hidden_states=encoder_outputs.hidden_states,  # type:ignore
             attentions=encoder_outputs.attentions,  # type:ignore
         )
@@ -512,24 +522,21 @@ class MapleCLIPSeg(HFCLIPSegWrapper):
     def get_vision_outputs(
         self,
         pixel_values: torch.FloatTensor,
-        text_intermediate_states: Iterable[torch.Tensor],
         output_attentions: bool | None,
         output_hidden_states: bool | None,
     ) -> tuple[
-        list[torch.Tensor],
-        torch.FloatTensor,
-        BaseModelOutputWithPooling,
+        tuple[torch.Tensor, ...],
+        BaseModelOutput,
     ]:
         _self = self.model
 
-        vision_outputs: BaseModelOutputWithPooling = self.vision_model_forward(
+        vision_outputs: BaseModelOutput = self.vision_model_forward(
             pixel_values=pixel_values,
-            text_intermediate_states=text_intermediate_states,
             output_attentions=output_attentions,
             output_hidden_states=True,  # we need the intermediate hidden states
             return_dict=True,
         )  # type:ignore
-        pooled_output = _self.clip.visual_projection(vision_outputs[1])
+        # pooled_output = _self.clip.visual_projection(vision_outputs[1])
 
         hidden_states = vision_outputs.hidden_states
 
@@ -538,38 +545,129 @@ class MapleCLIPSeg(HFCLIPSegWrapper):
             raise ValueError(msg)
 
         # we add +1 here as the hidden states also include the initial embeddings
-        activations = [hidden_states[i + 1] for i in _self.extract_layers]
+        activations = tuple(hidden_states[i + 1] for i in _self.extract_layers)
 
-        vision_outputs = BaseModelOutputWithPooling(
+        vision_outputs = BaseModelOutput(
             last_hidden_state=vision_outputs.last_hidden_state,
-            pooler_output=vision_outputs.pooler_output,
             hidden_states=hidden_states if output_hidden_states else None,
             attentions=vision_outputs.attentions,
         )
-        return activations, pooled_output, vision_outputs
+        return activations, vision_outputs
 
     def get_conditional_embeddings(
         self,
-        input_ids: torch.LongTensor,
-        num_query_images: int,
-        attention_mask: torch.Tensor | None,
-        position_ids: torch.LongTensor | None,
-    ):
-        # compute conditional embeddings from texts
-        if len(input_ids) != num_query_images:
-            msg = "Make sure to pass as many prompt texts as there are query images"
-            raise ValueError(msg)
+        batch_size: int | None = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        conditional_pixel_values: torch.FloatTensor | None = None,
+    ) -> torch.FloatTensor:
+        if input_ids is not None:
+            # compute conditional embeddings from texts
+            if len(input_ids) != batch_size:
+                raise ValueError(
+                    "Make sure to pass as many prompt texts as there are query images"
+                )
 
-        return self.get_text_features(
-            input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
+            return self.get_text_features(
+                input_ids, attention_mask=attention_mask, position_ids=position_ids
+            )
+
+        if conditional_pixel_values is not None:
+            # compute conditional embeddings from images
+            if len(conditional_pixel_values) != batch_size:
+                raise ValueError(
+                    "Make sure to pass as many prompt images as there are query images"
+                )
+            return self.model.clip.get_image_features(conditional_pixel_values)
+
+        raise ValueError(
+            "Invalid conditional, should be either provided as `input_ids` or `conditional_pixel_values`"
+        )
+
+    def decoder_forward(
+        self,
+        hidden_states: Sequence[torch.Tensor],
+        conditional_embeddings: torch.Tensor,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = True,
+    ):
+        _self = self.model.decoder
+
+        activations = hidden_states[::-1]
+
+        first_act = activations[0]
+
+        output = torch.zeros(
+            self.model.config.reduce_dim,
+            dtype=first_act.dtype,
+            device=first_act.device,
+        )
+
+        all_hidden_states = []
+        all_attentions = []
+
+        for i, (activation, layer, reduce) in enumerate(
+            zip(activations, _self.layers, _self.reduces, strict=True)
+        ):
+            # Cannot use += here due to broadcasting
+            output = reduce(activation) + output
+
+            if i == _self.conditional_layer:
+                output = _self.film_mul(conditional_embeddings) * output.permute(
+                    1, 0, 2
+                ) + _self.film_add(conditional_embeddings)
+                output = output.permute(1, 0, 2)
+
+            layer_outputs = layer(
+                output,
+                attention_mask=None,
+                causal_attention_mask=None,
+                output_attentions=output_attentions,
+            )
+
+            output = layer_outputs[0]
+
+            if output_hidden_states:
+                all_hidden_states.append(output)
+
+            if output_attentions:
+                all_attentions.append(layer_outputs[1])
+
+        output = output[:, 1 : -self.context_learner.num_context, :].permute(
+            0, 2, 1
+        )  # remove cls token and reshape to [batch_size, reduce_dim, seq_len]
+
+        B, H, N = output.shape
+
+        size = math.isqrt(N)
+
+        output = output.view(B, H, size, size)
+
+        logits = _self.transposed_convolution(output).squeeze()
+
+        all_hidden_states = tuple(all_hidden_states) if output_hidden_states else None
+
+        all_attentions = tuple(all_attentions) if output_attentions else None
+
+        if not return_dict:
+            return tuple(
+                v for v in [logits, all_hidden_states, all_attentions] if v is not None
+            )
+
+        return CLIPSegDecoderOutput(
+            logits=logits,
+            hidden_states=all_hidden_states,
+            attentions=all_attentions,
         )
 
     def model_forward(
         self,
         input_ids: torch.LongTensor | None = None,
         pixel_values: torch.FloatTensor | None = None,
+        conditional_pixel_values: torch.FloatTensor | None = None,
+        conditional_embeddings: torch.FloatTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         labels: torch.LongTensor | None = None,
@@ -589,47 +687,55 @@ class MapleCLIPSeg(HFCLIPSegWrapper):
             )
             raise ValueError(msg)
 
-        # step 1: compute conditional embeddings, either from text, images or an own provided embedding
-        projected_conditional_embedding, text_intermediate_states = (
-            self.get_conditional_embeddings(
-                input_ids=input_ids,  # type:ignore
-                num_query_images=len(pixel_values),
+        if conditional_embeddings is None:
+            # step 1: compute conditional embeddings, either from text, images or an own provided embedding
+            conditional_embeddings = self.get_conditional_embeddings(
+                batch_size=pixel_values.shape[0],
+                input_ids=input_ids,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
+                conditional_pixel_values=conditional_pixel_values,
             )
-        )
+        else:
+            if conditional_embeddings.shape[0] != pixel_values.shape[0]:
+                raise ValueError(
+                    "Make sure to pass as many conditional embeddings as there are query images in the batch"
+                )
+            if conditional_embeddings.shape[1] != self.config.projection_dim:
+                raise ValueError(
+                    "Make sure that the feature dimension of the conditional embeddings matches"
+                    " `config.projection_dim`."
+                )
 
         # step 2: forward the query images through the frozen CLIP vision encoder
-        activations, pooled_output, vision_outputs = self.get_vision_outputs(
+        activations, vision_outputs = self.get_vision_outputs(
             pixel_values=pixel_values,
-            text_intermediate_states=text_intermediate_states,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
         )
 
         # step 3: forward both the pooled output and the activations through the lightweight decoder to predict masks
-        decoder_outputs = _self.decoder(
+        decoder_outputs = self.decoder_forward(
             activations,
-            projected_conditional_embedding,
+            conditional_embeddings,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        logits = decoder_outputs.logits if return_dict else decoder_outputs[0]
+        logits = decoder_outputs[0]
 
-        loss: torch.FloatTensor | None = (  # type: ignore
+        loss = (
             None
             if labels is None
             else F.binary_cross_entropy_with_logits(logits, labels)
         )
 
         return CLIPSegImageSegmentationOutput(
-            loss=loss,
+            loss=loss,  # type:ignore
             logits=logits,
-            conditional_embeddings=projected_conditional_embedding,
-            pooled_output=pooled_output,
+            conditional_embeddings=conditional_embeddings,
             vision_model_output=vision_outputs,  # type:ignore
-            decoder_output=decoder_outputs,
+            decoder_output=decoder_outputs,  # type:ignore
         )
 
     def forward(
