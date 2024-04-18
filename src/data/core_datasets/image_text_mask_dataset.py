@@ -29,9 +29,12 @@ class ImageTextMaskDataset(BaseImageTextMaskDataset):
         task_path: StrOrPath,
         prompt_index: int,
         override_prompt: str | None = None,
+        insert_stop_at_last: bool = False,
         **kwargs,
     ) -> None:
         tasks = self.get_tasks(task_path)
+
+        super().__init__(tasks=tasks, **kwargs)
 
         self.image_dir = Path(image_dir)
         self.mask_dir = Path(mask_dir)
@@ -40,7 +43,7 @@ class ImageTextMaskDataset(BaseImageTextMaskDataset):
 
         self.override_prompt = override_prompt
 
-        super().__init__(tasks=tasks, **kwargs)
+        self.insert_stop_at_last = insert_stop_at_last
 
     @staticmethod
     def get_tasks(task_path: StrOrPath) -> list[dict[str, str | PromptMappingType]]:
@@ -78,6 +81,9 @@ class ImageTextMaskDataset(BaseImageTextMaskDataset):
             mask = transformed["mask"]
 
         curr_prompt = self.get_curr_prompt(task)
+
+        if self.insert_stop_at_last and curr_prompt[-1] != ".":
+            curr_prompt += "."
 
         text_inputs = self.tokenizer(curr_prompt)
 

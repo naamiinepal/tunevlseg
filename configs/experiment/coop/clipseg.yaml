@@ -5,7 +5,7 @@
 
 defaults:
   - override /data: image_text_mask
-  - override /model: coop/clipseg.yaml
+  - override /model: coop/clipseg
   - override /callbacks: default
   - override /trainer: default
   - override /logger: wandb
@@ -68,7 +68,8 @@ override_prompt: null
 max_length: null
 return_tensors: pt
 
-predict: false
+insert_stop_at_last: true
+predict: true
 
 # Image pre-processing configs
 

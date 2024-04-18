@@ -11,6 +11,7 @@ train_ds:
   model_max_length: ${max_length}
   return_tensors: ${return_tensors}
   collate_fn: ${collate_fn}
+  insert_stop_at_last: ${insert_stop_at_last}
 
 val_ds:
   _target_: src.data.core_datasets.ImageTextMaskDataset
@@ -24,6 +25,7 @@ val_ds:
   model_max_length: ${max_length}
   return_tensors: ${return_tensors}
   collate_fn: ${collate_fn}
+  insert_stop_at_last: ${insert_stop_at_last}
 
 test_ds:
   _target_: src.data.core_datasets.ImageTextMaskDataset
@@ -37,6 +39,7 @@ test_ds:
   model_max_length: ${max_length}
   return_tensors: ${return_tensors}
   collate_fn: ${collate_fn}
+  insert_stop_at_last: ${insert_stop_at_last}
 
 batch_size: 64
 num_workers: 4
