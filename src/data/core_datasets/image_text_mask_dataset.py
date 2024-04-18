@@ -91,7 +91,7 @@ class ImageTextMaskDataset(BaseImageTextMaskDataset):
         return {
             "image": image,
             "mask": mask,
-            "mask_shape": np.array(mask.shape),  # Needed to collate properly
+            "mask_shape": np.array(mask.shape[:-1]),  # Needed to collate properly
             "mask_name": mask_name,
             "prompt": curr_prompt,
             **text_inputs,
