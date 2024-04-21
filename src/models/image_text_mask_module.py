@@ -302,6 +302,7 @@ class ImageTextMaskModule(LightningModule):
         blacklist_weight_modules = (
             nn.Embedding,
             nn.GroupNorm,
+            nn.LayerNorm,
             nn.modules.batchnorm._NormBase,  # Base class for batchnorm and instance norm
         )
         for mn, m in self.named_modules():
@@ -325,7 +326,7 @@ class ImageTextMaskModule(LightningModule):
                     no_decay.add(fpn)
 
         inter_params = decay & no_decay
-        if len(inter_params) == 0:
+        if len(inter_params) != 0:
             msg = f"parameters {inter_params} made it into both decay/no_decay sets!"
             raise ValueError(msg)
 
@@ -333,7 +334,7 @@ class ImageTextMaskModule(LightningModule):
         param_dict = dict(self.named_parameters())
 
         extra_params = param_dict.keys() - (decay | no_decay)
-        if len(extra_params) == 0:
+        if len(extra_params) != 0:
             msg = f"parameters {extra_params} were not separated into either decay/no_decay set!"
             raise ValueError(msg)
 
