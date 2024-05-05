@@ -244,7 +244,7 @@ class TransDecoder(nn.Module):
                 size=size,
                 scale_factor=scale_factor,
                 mode=up_mode,
-            )
+            ),
         ]
         # Add bias when norm is not None and if bias is not provided
         instantiate_bias = norm is None and conv_bias is None

@@ -21,7 +21,15 @@ exclude_lines = [
 ]
 
 [tool.ruff]
-lint.select = [
+# Assume Python 3.10
+target-version = "py310"
+fix = true
+unsafe-fixes = true
+
+[tool.ruff.lint]
+preview = true
+
+select = [
   # pycodestyle
   "E",
   # Pyflakes
@@ -44,10 +52,27 @@ lint.select = [
   "NPY",
   # Perflint
   "PERF",
+  # A tool for refurbishing and modernizing Python codebases.
+  "FURB",
+  # provides specializations for type hinting stub files
+  "PYI",
+  #flake8-blind-except
+  "BLE",
+  #Ruff-specific rules
+  "RUF",
+  # flake8-type-checking
+  "TCH",
+  # Pylint
+  "PL"
 ]
 
-# Avoid enforcing line-length violations (`E501`)
-lint.ignore = ["E501"]
 
-# Assume Python 3.10
-target-version = "py310"
+# Avoid enforcing line-length violations (`E501`)
+ignore = ["E501", "PLR", "PLC"]
+
+# Allow fix for all enabled rules (when `--fix`) is provided.
+fixable = ["ALL"]
+unfixable = ["T20"]
+
+[tool.pyright]
+typeCheckingMode = "standard"

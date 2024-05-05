@@ -5,7 +5,8 @@ from torch import distributed as dist
 from torch import nn
 from torch.nn import functional as F
 
-from ..utils import comm, env
+from detectron2.utils import comm, env
+
 from .wrappers import BatchNorm2d
 
 
@@ -264,7 +265,7 @@ class NaiveSyncBatchNorm(BatchNorm2d):
         else:
             if B == 0:
                 vec = torch.zeros([2 * C + 1], device=mean.device, dtype=mean.dtype)
-                vec = vec + input.sum()  # make sure there is gradient w.r.t input
+                vec += input.sum()  # make sure there is gradient w.r.t input
             else:
                 vec = torch.cat(
                     [

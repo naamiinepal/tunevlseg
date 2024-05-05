@@ -5,7 +5,7 @@ from fvcore.nn import weight_init
 from torch import nn
 from torch.nn import functional as F
 
-from ...layers import (
+from detectron2.layers import (
     CNNBlockBase,
     Conv2d,
     DeformConv,
@@ -13,6 +13,7 @@ from ...layers import (
     ShapeSpec,
     get_norm,
 )
+
 from .backbone import Backbone
 
 __all__ = [
@@ -177,9 +178,9 @@ class BottleneckBlock(CNNBlockBase):
         # so that at the beginning, the residual branch starts with zeros,
         # and each residual block behaves like an identity.
         # See Sec 5.1 in "Accurate, Large Minibatch SGD: Training ImageNet in 1 Hour":
-        # "For BN layers, the learnable scaling coefficient γ is initialized
+        # "For BN layers, the learnable scaling coefficient y is initialized
         # to be 1, except for each residual block's last BN
-        # where γ is initialized to be 0."
+        # where y is initialized to be 0."
 
         # nn.init.constant_(self.conv3.norm.weight, 0)
         # TODO this somehow hurts performance when training GN models from scratch.
@@ -382,10 +383,8 @@ class ResNet(Backbone):
             # Avoid keeping unused layers in this module. They consume extra memory
             # and may cause allreduce to fail
             num_stages = max(
-                [
-                    {"res2": 1, "res3": 2, "res4": 3, "res5": 4}.get(f, 0)
-                    for f in out_features
-                ],
+                {"res2": 1, "res3": 2, "res4": 3, "res5": 4}.get(f, 0)
+                for f in out_features
             )
             stages = stages[:num_stages]
         for i, blocks in enumerate(stages):

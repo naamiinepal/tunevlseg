@@ -50,7 +50,7 @@ def create_local_process_group(num_workers_per_machine: int) -> None:
           the number of GPUs.
 
     """
-    global _LOCAL_PROCESS_GROUP
+    global _LOCAL_PROCESS_GROUP  # noqa: PLW0603
     assert _LOCAL_PROCESS_GROUP is None
     assert get_world_size() % num_workers_per_machine == 0
     num_machines = get_world_size() // num_workers_per_machine

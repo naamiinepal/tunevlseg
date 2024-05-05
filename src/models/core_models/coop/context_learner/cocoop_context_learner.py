@@ -57,12 +57,16 @@ class CoCoOpContextLearner(CoOpContextLearner):
         net = nn.Sequential(
             nn.Dropout(p=dropout_prob, inplace=True),
             nn.Linear(
-                visual_dim, intermediate_dim, bias=False
+                visual_dim,
+                intermediate_dim,
+                bias=False,
             ),  # disable bias when using norm
             nn.LayerNorm(intermediate_dim),
             nn.ReLU(inplace=True),
             nn.Linear(
-                intermediate_dim, intermediate_dim, bias=False
+                intermediate_dim,
+                intermediate_dim,
+                bias=False,
             ),  # disable bias when using norm
             nn.LayerNorm(intermediate_dim),
             nn.ReLU(inplace=True),
@@ -72,7 +76,8 @@ class CoCoOpContextLearner(CoOpContextLearner):
                 bias=False,
             ),  # disable bias when using norm
             nn.LayerNorm(
-                context_dim, bias=False
+                context_dim,
+                bias=False,
             ),  # Since we are adding to learnable context vectors, no need for bias
         )
 

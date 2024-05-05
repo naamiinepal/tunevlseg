@@ -114,7 +114,7 @@ def main(
                 filename = futures[future]
                 try:
                     results = future.result()
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001
                     print(f"{filename} generated an exception: {exc}")
                 else:
                     aggregator["filename"].append(filename)

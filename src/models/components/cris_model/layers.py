@@ -210,7 +210,7 @@ class TransformerDecoder(nn.Module):
         pe = torch.zeros(d_model, height, width, **input_tensor_like_kwargs)
 
         # Each dimension use half of d_model
-        d_model = d_model // 2
+        d_model //= 2
         mul_term = 1e-4 ** (
             torch.arange(0, d_model, 2, **input_tensor_like_kwargs) / d_model
         )
@@ -342,7 +342,7 @@ class TransformerDecoderLayer(nn.Module):
         q = k = self.with_pos_embed(vis2, vis_pos)
         vis2 = self.self_attn(q, k, value=vis2)[0]
         vis2 = self.self_attn_norm(vis2)
-        vis = vis + self.dropout1(vis2)
+        vis += self.dropout1(vis2)
 
         # Cross-Attention
         vis2 = self.norm2(vis)
@@ -353,7 +353,7 @@ class TransformerDecoderLayer(nn.Module):
             key_padding_mask=pad_mask,
         )[0]
         vis2 = self.cross_attn_norm(vis2)
-        vis = vis + self.dropout2(vis2)
+        vis += self.dropout2(vis2)
         # FFN
         vis2 = self.norm3(vis)
         vis2 = self.ffn(vis2)

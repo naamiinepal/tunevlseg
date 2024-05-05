@@ -472,7 +472,7 @@ class SOLOv2(nn.Module):
                 min=1.0,
             )
             warmup_factor = min(self._iter.item() / float(self._warmup_iters), 1.0)
-            cur_loss_pairwise = cur_loss_pairwise * warmup_factor
+            cur_loss_pairwise *= warmup_factor
             loss_pairwise.append(cur_loss_pairwise)
 
         if not loss_ins_max:
@@ -491,7 +491,7 @@ class SOLOv2(nn.Module):
             loss_pairwise = 0
         else:
             loss_pairwise = torch.stack(loss_pairwise).mean()
-            loss_pairwise = 1.0 * loss_pairwise
+            loss_pairwise *= 1.0
 
         return {
             "loss_ins": loss_ins,
@@ -658,14 +658,8 @@ class SOLOv2(nn.Module):
         if num_ins:
             flatten_emb_labels = flatten_emb_labels[pos_inds]
             flatten_emb_preds = flatten_emb_preds[pos_inds]
-            flatten_emb_preds = flatten_emb_preds / flatten_emb_preds.norm(
-                dim=1,
-                keepdim=True,
-            )
-            flatten_emb_labels = flatten_emb_labels / flatten_emb_labels.norm(
-                dim=1,
-                keepdim=True,
-            )
+            flatten_emb_preds /= flatten_emb_preds.norm(dim=1, keepdim=True)
+            flatten_emb_labels /= flatten_emb_labels.norm(dim=1, keepdim=True)
             loss_emb = 1 - (flatten_emb_preds * flatten_emb_labels).sum(dim=-1)
             loss_emb = loss_emb.mean() * 4.0
         else:

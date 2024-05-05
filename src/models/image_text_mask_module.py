@@ -1,7 +1,7 @@
 # pyright: reportIncompatibleMethodOverride=false
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Final, Literal
 
 import torch
 import wandb
@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 class ImageTextMaskModule(LightningModule):
     """Example of a `LightningModule` for Segmentation using Image and Text."""
 
-    plot_columns = ["Image", "Caption", "Label"]
+    plot_columns: Final = ["Image", "Caption", "Label"]
 
     def __init__(
         self,

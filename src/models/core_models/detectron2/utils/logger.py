@@ -25,7 +25,7 @@ class _ColorfulFormatter(logging.Formatter):
         self._root_name = kwargs.pop("root_name") + "."
         self._abbrev_name = kwargs.pop("abbrev_name", "")
         if len(self._abbrev_name):
-            self._abbrev_name = self._abbrev_name + "."
+            self._abbrev_name += "."
         super().__init__(*args, **kwargs)
 
     def formatMessage(self, record):
@@ -106,7 +106,7 @@ def setup_logger(
         else:
             filename = os.path.join(output, "log.txt")
         if distributed_rank > 0:
-            filename = filename + f".rank{distributed_rank}"
+            filename += f".rank{distributed_rank}"
         PathManager.mkdirs(os.path.dirname(filename))
 
         fh = logging.StreamHandler(_cached_log_stream(filename))
@@ -197,7 +197,7 @@ def log_first_n(lvl, msg, n=1, *, name=None, key="caller") -> None:
     caller_module, caller_key = _find_caller()
     hash_key = ()
     if "caller" in key:
-        hash_key = hash_key + caller_key
+        hash_key += caller_key
     if "message" in key:
         hash_key = (*hash_key, msg)
 

@@ -12,7 +12,7 @@ import warnings
 import torch
 from torch.nn import functional as F
 
-from ..utils.env import TORCH_VERSION
+from detectron2.utils.env import TORCH_VERSION
 
 
 def shapes_to_tensor(x: list[int], device: torch.device | None = None) -> torch.Tensor:

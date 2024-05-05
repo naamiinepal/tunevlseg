@@ -80,10 +80,7 @@ class Instances:
         if len(self._fields):
             assert (
                 len(self) == data_len
-            ), "Adding a field of length {} to a Instances of length {}".format(
-                data_len,
-                len(self),
-            )
+            ), f"Adding a field of length {data_len} to a Instances of length {len(self)}"
         self._fields[name] = value
 
     def has(self, name: str) -> bool:
@@ -118,9 +115,8 @@ class Instances:
         """
         ret = Instances(self._image_size)
         for k, v in self._fields.items():
-            if hasattr(v, "to"):
-                v = v.to(*args, **kwargs)
-            ret.set(k, v)
+            _v = v.to(*args, **kwargs) if hasattr(v, "to") else v
+            ret.set(k, _v)
         return ret
 
     def __getitem__(self, item: int | slice | torch.BoolTensor) -> "Instances":

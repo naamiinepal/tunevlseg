@@ -100,7 +100,7 @@ def setup_environment() -> None:
     the $DETECTRON2_ENV_MODULE environment variable, that performs
     custom setup work that may be necessary to their computing environment.
     """
-    global _ENV_SETUP_DONE
+    global _ENV_SETUP_DONE  # noqa: PLW0603
     if _ENV_SETUP_DONE:
         return
     _ENV_SETUP_DONE = True
@@ -111,9 +111,9 @@ def setup_environment() -> None:
 
     if custom_module_path:
         setup_custom_environment(custom_module_path)
-    else:
-        # The default setup is a no-op
-        pass
+    # else:
+    # The default setup is a no-op
+    # pass
 
 
 def setup_custom_environment(custom_module) -> None:

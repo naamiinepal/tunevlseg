@@ -5,10 +5,7 @@ import torch
 from torch import device
 from torch.nn import functional as F
 
-from ..layers.wrappers import (
-    move_device_like,
-    shapes_to_tensor,
-)
+from detectron2.layers.wrappers import move_device_like, shapes_to_tensor
 
 
 class ImageList:

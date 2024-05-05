@@ -153,7 +153,7 @@ class AttentionPool2d(nn.Module):
         # x = torch.cat([x.mean(dim=-1, keepdim=True), x], dim=-1)  # NC(1+HW)
         pos_embed = self.positional_embedding.unsqueeze(0)
         pos_embed = self.resize_pos_embed(pos_embed, (H, W))  # NC(HW)
-        x = x + pos_embed  # NC(HW)
+        x += pos_embed  # NC(HW)
         x = x.permute(2, 0, 1)  # (HW)NC
         x, _ = F.multi_head_attention_forward(
             query=x,
@@ -179,7 +179,7 @@ class AttentionPool2d(nn.Module):
             need_weights=False,
         )
         x = x.permute(1, 2, 0).reshape(B, -1, H, W)
-        x = x + res
+        x += res
         return torch.relu(x)
 
 
@@ -314,7 +314,7 @@ class ResidualAttentionBlock(nn.Module):
         return self.attn(x, x, x, *args, need_weights=False, **kwargs)[0]
 
     def forward(self, x: torch.Tensor, *args, **kwargs) -> torch.Tensor:
-        x = x + self.attention(self.ln_1(x), *args, **kwargs)
+        x += self.attention(self.ln_1(x), *args, **kwargs)
         return x + self.mlp(self.ln_2(x))
 
 
@@ -389,7 +389,7 @@ class VisionTransformer(nn.Module):
             ),
             dim=1,
         )  # shape = [*, grid ** 2 + 1, width]
-        x = x + self.positional_embedding
+        x += self.positional_embedding
         x = self.ln_pre(x)
 
         x = x.permute(1, 0, 2)  # NLD -> LND
@@ -400,7 +400,7 @@ class VisionTransformer(nn.Module):
         x = self.ln_post(x[:, 1:, :])
 
         if self.proj is not None:
-            x = x @ self.proj
+            x @= self.proj
 
         return x
 
@@ -513,7 +513,7 @@ class CLIP(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor]:
         x = self.token_embedding(text)  # [batch_size, n_ctx, d_model]
 
-        x = x + self.positional_embedding[: x.size(1)]
+        x += self.positional_embedding[: x.size(1)]
         x = x.permute(1, 0, 2)  # NLD -> LND
         x = self.transformer(x, *args, **kwargs)
         x = x.permute(1, 0, 2)  # LND -> NLD

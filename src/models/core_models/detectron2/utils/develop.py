@@ -3,6 +3,7 @@
 These are not visible to users (not automatically imported). And should not
 appeared in docs.
 """
+
 # adapted from https://github.com/tensorpack/tensorpack/blob/master/tensorpack/utils/develop.py
 from typing import NoReturn
 
@@ -26,7 +27,7 @@ def create_dummy_class(klass, dependency, message=""):
 
     class _DummyMetaClass(type):
         # throw error on class attribute access
-        def __getattr__(self, __):
+        def __getattr__(cls, __):
             raise ImportError(err)
 
     class _Dummy(metaclass=_DummyMetaClass):

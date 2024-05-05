@@ -79,7 +79,7 @@ class COOPCRIS(CRIS):
             image_features=image_features,
         )
 
-        x = x + _self.positional_embedding[: x.size(1)]
+        x += _self.positional_embedding[: x.size(1)]
         x = x.permute(1, 0, 2)  # NLD -> LND
         x = _self.transformer(x, *args, **kwargs)
         x = x.permute(1, 0, 2)  # LND -> NLD

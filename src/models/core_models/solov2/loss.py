@@ -91,7 +91,7 @@ def weight_reduce_loss(
     """
     # if weight is specified, apply element-wise weight
     if weight is not None:
-        loss = loss * weight
+        loss *= weight
 
     # if avg_factor is not specified, just reduce the loss
     if avg_factor is None:
@@ -150,7 +150,7 @@ class FocalLoss(nn.Module):
         reduction_override=None,
     ):
         assert reduction_override in {None, "none", "mean", "sum"}
-        reduction = reduction_override if reduction_override else self.reduction
+        reduction = reduction_override or self.reduction
         return self.loss_weight * sigmoid_focal_loss(
             pred,
             target,

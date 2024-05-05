@@ -429,7 +429,7 @@ def get_unique_masks(
     for future in concurrent.futures.as_completed(futures_to_task):
         try:
             mask_path = future.result()
-        except Exception as e:
+        except Exception as e:  # noqa: PERF203, BLE001
             image_id = futures_to_task[future]
             print(f"Got an exception: {e} for image_id: {image_id}")
         else:

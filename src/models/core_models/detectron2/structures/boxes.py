@@ -431,12 +431,12 @@ def matched_pairwise_iou(boxes1: Boxes, boxes2: Boxes) -> torch.Tensor:
         Tensor: iou, sized [N].
 
     """
-    assert len(boxes1) == len(
-        boxes2,
-    ), "boxlists should have the samenumber of entries, got {}, {}".format(
-        len(boxes1),
-        len(boxes2),
-    )
+    assert (
+        len(boxes1)
+        == len(
+            boxes2,
+        )
+    ), f"boxlists should have the samenumber of entries, got {len(boxes1)}, {len(boxes2)}"
     area1 = boxes1.area()  # [N]
     area2 = boxes2.area()  # [N]
     box1, box2 = boxes1.tensor, boxes2.tensor
