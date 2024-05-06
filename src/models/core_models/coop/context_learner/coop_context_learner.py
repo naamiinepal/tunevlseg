@@ -2,11 +2,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-import torch
-
 from .base_context_learner import BaseContextLearner
 
 if TYPE_CHECKING:
+    import torch
     from transformers import PreTrainedTokenizerBase
 
     from .base_context_learner import EmbeddingLayerType
