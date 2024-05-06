@@ -9,7 +9,7 @@ import mmengine
 from .version import __version__, version_info
 
 MMCV_MIN = "2.0.0rc4"
-MMCV_MAX = "2.2.0"
+MMCV_MAX = "2.2.1"
 MMENGINE_MIN = "0.5.0"
 MMENGINE_MAX = "1.0.0"
 

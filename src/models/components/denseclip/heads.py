@@ -1,6 +1,8 @@
+from mmseg.models.builder import HEADS
 from mmseg.models.decode_heads.decode_head import BaseDecodeHead
 
 
+@HEADS.register_module()
 class IdentityHead(BaseDecodeHead):
     """Panoptic Feature Pyramid Networks.
     This head is the implementation of `Semantic FPN

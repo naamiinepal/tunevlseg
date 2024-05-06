@@ -3,15 +3,15 @@ from .heads import IdentityHead
 from .models import (
     CLIPResNet,
     CLIPResNetWithAttention,
-    CLIPTextEncoder,
     CLIPVisionTransformer,
+    CustomCLIPTextEncoder,
 )
 
 __all__ = [
     "CLIPResNet",
     "CLIPResNetWithAttention",
-    "CLIPTextEncoder",
     "CLIPVisionTransformer",
+    "CustomCLIPTextEncoder",
     "DenseCLIP",
     "IdentityHead",
 ]

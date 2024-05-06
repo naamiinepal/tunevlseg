@@ -1,0 +1,19 @@
+import torch
+
+from ..registry import meta_profiler_function
+
+
+@meta_profiler_function.register(torch.nn.functional.embedding)
+def torch_nn_functional_embedding(
+    input: torch.Tensor,
+    weight: torch.Tensor,
+    padding_idx: int | None = None,
+    max_norm: float | None = None,
+    norm_type: float = 2.0,
+    scale_grad_by_freq: bool = False,
+    sparse: bool = False,
+) -> torch.Tensor:
+    # F.embedding is a dictionary lookup, so technically it has 0 FLOPs. (https://discuss.pytorch.org/t/correct-way-to-calculate-flops-in-model/67198/6)
+    flops = 0
+    macs = 0
+    return flops, macs

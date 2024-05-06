@@ -1,5 +1,5 @@
 from collections.abc import Iterable, Mapping, Sequence
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 import torch
 from torch import nn
@@ -10,10 +10,16 @@ from mmseg.models import builder
 from mmseg.models.segmentors.base import BaseSegmentor
 from mmseg.models.utils import resize
 from mmseg.utils import add_prefix
+from mmseg.utils.typing_utils import SampleList
 
 from .untils import tokenize
 
+if TYPE_CHECKING:
+    from mmengine.model.base_module import BaseModule
+    from mmseg.models.decode_heads.decode_head import BaseDecodeHead
 
+
+@builder.SEGMENTORS.register_module()
 class DenseCLIP(BaseSegmentor):
     """Encoder Decoder segmentors.
 
@@ -66,7 +72,7 @@ class DenseCLIP(BaseSegmentor):
             else:
                 text_encoder.pretrained = pretrained
 
-        self.backbone = builder.build_backbone(backbone)
+        self.backbone: BaseModule = builder.build_backbone(backbone)
         self.text_encoder = builder.build_backbone(text_encoder)
         self.context_decoder = builder.build_backbone(context_decoder)
         self.context_length = context_length
@@ -85,7 +91,7 @@ class DenseCLIP(BaseSegmentor):
         self._init_auxiliary_head(auxiliary_head)
 
         self.with_identity_head = False
-        self.identity_head = None
+        self.identity_head: BaseDecodeHead | None = None
         self._init_identity_head(identity_head)
 
         self.train_cfg = train_cfg
@@ -105,7 +111,7 @@ class DenseCLIP(BaseSegmentor):
 
     def _init_decode_head(self, decode_head: ConfigDict):
         """Initialize ``decode_head``"""
-        self.decode_head = builder.build_head(decode_head)
+        self.decode_head: BaseDecodeHead = builder.build_head(decode_head)
         self.align_corners = self.decode_head.align_corners
         self.num_classes = self.decode_head.num_classes
 
@@ -113,6 +119,7 @@ class DenseCLIP(BaseSegmentor):
         self, auxiliary_head: Iterable[ConfigDict] | ConfigDict | None
     ):
         """Initialize ``auxiliary_head``"""
+        self.auxiliary_head: nn.ModuleList | BaseDecodeHead | None
         if auxiliary_head is not None:
             if isinstance(auxiliary_head, Iterable):
                 self.auxiliary_head = nn.ModuleList()
@@ -130,58 +137,6 @@ class DenseCLIP(BaseSegmentor):
     def extract_feat(self, inputs: torch.Tensor):
         """Extract features from images."""
         return self.backbone(inputs)
-
-    def _decode_head_forward_train(
-        self, x: Iterable[torch.Tensor], img_metas: Sequence[Mapping], gt_semantic_seg
-    ):
-        """Run forward function and calculate loss for decode head in
-        training."""
-        losses = {}
-        loss_decode = self.decode_head.forward_train(
-            x, img_metas, gt_semantic_seg, self.train_cfg
-        )
-
-        losses.update(add_prefix(loss_decode, "decode"))
-        return losses
-
-    def _decode_head_forward_test(self, x, img_metas):
-        """Run forward function and calculate loss for decode head in
-        inference."""
-        return self.decode_head.forward_test(x, img_metas, self.test_cfg)
-
-    def _auxiliary_head_forward_train(self, x, img_metas, gt_semantic_seg):
-        """Run forward function and calculate loss for auxiliary head in
-        training."""
-        losses = {}
-        if isinstance(self.auxiliary_head, nn.ModuleList):
-            for idx, aux_head in enumerate(self.auxiliary_head):
-                loss_aux = aux_head.forward_train(
-                    x, img_metas, gt_semantic_seg, self.train_cfg
-                )
-                losses.update(add_prefix(loss_aux, f"aux_{idx}"))
-        else:
-            loss_aux = self.auxiliary_head.forward_train(
-                x, img_metas, gt_semantic_seg, self.train_cfg
-            )
-            losses.update(add_prefix(loss_aux, "aux"))
-
-        return losses
-
-    def _identity_head_forward_train(
-        self,
-        x: torch.Tensor,
-        img_metas: Sequence[Mapping],
-        gt_semantic_seg: torch.Tensor,
-    ):
-        """Run forward function and calculate loss for auxiliary head in
-        training."""
-        losses = {}
-        if self.identity_head is not None:
-            loss_aux = self.identity_head.forward_train(
-                x, img_metas, gt_semantic_seg, self.train_cfg
-            )
-            losses.update(add_prefix(loss_aux, "aux_identity"))
-        return losses
 
     def after_extract_feat(self, x: torch.Tensor):
         x_orig = list(x[:4])
@@ -214,11 +169,45 @@ class DenseCLIP(BaseSegmentor):
         )
         return text_embeddings, x_orig, score_map
 
-    def forward_train(
+    def _forward(self, inputs: torch.Tensor, data_samples: SampleList | None = None):
+        x = self.extract_feat(inputs)
+
+        _x_orig = [x[i] for i in range(4)]
+        text_embeddings, x_orig, _score_map = self.after_extract_feat(x)
+
+        if self.with_neck:
+            x_orig = list(self.neck(x_orig))
+
+        x = [text_embeddings, *x_orig] if self.text_head else x_orig
+        # print('text_embedding=', text_embeddings[0])
+        out = self.decode_head(x)
+        # print('cls_map=', out[0,:,40, 40])
+
+        return resize(
+            input=out,
+            size=inputs.shape[2:],
+            mode="bilinear",
+            align_corners=self.align_corners,
+        )
+
+    def predict(self, inputs: torch.Tensor, data_samples: SampleList | None = None):
+        x = self.extract_feat(inputs)
+
+        _x_orig = [x[i] for i in range(4)]
+        text_embeddings, x_orig, _score_map = self.after_extract_feat(x)
+
+        if self.with_neck:
+            x_orig = list(self.neck(x_orig))
+
+        x = [text_embeddings, *x_orig] if self.text_head else x_orig
+        # print('text_embedding=', text_embeddings[0])
+        return self.decode_head.predict(x, data_samples, self.test_cfg)
+        # print('cls_map=', out[0,:,40, 40])
+
+    def loss(
         self,
-        img: torch.Tensor,
-        img_metas: Sequence[Mapping],
-        gt_semantic_seg: torch.Tensor,
+        inputs: torch.Tensor,
+        data_samples: SampleList,
     ):
         """Forward function for training.
 
@@ -236,38 +225,43 @@ class DenseCLIP(BaseSegmentor):
             dict[str, Tensor]: a dictionary of loss components
         """
 
-        x = self.extract_feat(img)
+        x = self.extract_feat(inputs)
         _x_orig = [x[i] for i in range(4)]
-        text_embeddings, x_orig, score_map = self.after_extract_feat(x)
+        text_embeddings, x_orig, _score_map = self.after_extract_feat(x)
 
         if self.with_neck:
             x_orig = list(self.neck(x_orig))
             _x_orig = x_orig
 
-        losses = {}
         x = [text_embeddings, *x_orig] if self.text_head else x_orig
 
-        loss_decode = self._decode_head_forward_train(x, img_metas, gt_semantic_seg)
-        losses.update(loss_decode)
+        losses = {}
 
-        if self.with_identity_head:
-            loss_identity = self._identity_head_forward_train(
-                score_map / self.tau, img_metas, gt_semantic_seg
-            )
-            losses.update(loss_identity)
+        loss_decode = self.decode_head.loss(x, data_samples, self.train_cfg)
 
-        if self.with_auxiliary_head:
-            loss_aux = self._auxiliary_head_forward_train(
-                _x_orig, img_metas, gt_semantic_seg
-            )
-            losses.update(loss_aux)
+        losses.update(add_prefix(loss_decode, "decode"))
+
+        if self.identity_head is not None:
+            loss_aux = self.identity_head.loss(x, data_samples, self.train_cfg)
+            losses.update(add_prefix(loss_aux, "aux_identity"))
+
+        if self.auxiliary_head is not None:
+            if isinstance(self.auxiliary_head, nn.ModuleList):
+                for idx, aux_head in enumerate(self.auxiliary_head):
+                    loss_aux = aux_head.loss(x, data_samples, self.train_cfg)
+                    losses.update(add_prefix(loss_aux, f"aux_{idx}"))
+            else:
+                loss_aux = self.auxiliary_head.loss(x, data_samples, self.train_cfg)
+                losses.update(add_prefix(loss_aux, "aux"))
+                loss_aux = self._auxiliary_head_forward_train(_x_orig, data_samples)
+                losses.update(loss_aux)
 
         return losses
 
-    def encode_decode(self, img: torch.Tensor, img_metas: Sequence[Mapping]):  # type:ignore
+    def encode_decode(self, inputs: torch.Tensor, batch_data_samples: SampleList):
         """Encode images with backbone and decode into a semantic segmentation
         map of the same size as input."""
-        x = self.extract_feat(img)
+        x = self.extract_feat(inputs)
 
         _x_orig = [x[i] for i in range(4)]
         text_embeddings, x_orig, _score_map = self.after_extract_feat(x)
@@ -277,19 +271,19 @@ class DenseCLIP(BaseSegmentor):
 
         x = [text_embeddings, *x_orig] if self.text_head else x_orig
         # print('text_embedding=', text_embeddings[0])
-        out = self._decode_head_forward_test(x, img_metas)
+        out = self.decode_head(x)
         # print('cls_map=', out[0,:,40, 40])
 
         return resize(
             input=out,
-            size=img.shape[2:],
+            size=inputs.shape[2:],
             mode="bilinear",
             align_corners=self.align_corners,
         )
 
     # TODO refactor
     def slide_inference(
-        self, img: torch.Tensor, img_meta: Sequence[Mapping], rescale: bool
+        self, img: torch.Tensor, batch_data_samples: SampleList, rescale: bool
     ):
         """Inference by sliding-window with overlap.
 
@@ -297,8 +291,8 @@ class DenseCLIP(BaseSegmentor):
         decode without padding.
         """
         assert self.test_cfg is not None
-        h_stride, w_stride = self.test_cfg.stride
-        h_crop, w_crop = self.test_cfg.crop_size
+        h_stride, w_stride = getattr(self.test_cfg, "stride", (1, 1))
+        h_crop, w_crop = getattr(self.test_cfg, "crop_size", (1, 1))
         batch_size, _, h_img, w_img = img.size()
         num_classes = self.num_classes
         h_grids = max(h_img - h_crop + h_stride - 1, 0) // h_stride + 1
@@ -314,7 +308,7 @@ class DenseCLIP(BaseSegmentor):
                 y1 = max(y2 - h_crop, 0)
                 x1 = max(x2 - w_crop, 0)
                 crop_img = img[:, :, y1:y2, x1:x2]
-                crop_seg_logit = self.encode_decode(crop_img, img_meta)
+                crop_seg_logit = self.encode_decode(crop_img, batch_data_samples)
                 preds += F.pad(
                     crop_seg_logit,
                     (
@@ -336,7 +330,7 @@ class DenseCLIP(BaseSegmentor):
         if rescale:
             preds = resize(
                 preds,
-                size=img_meta[0]["ori_shape"][:2],
+                size=batch_data_samples[0].gt_sem_seg["ori_shape"][:2],
                 mode="bilinear",
                 align_corners=self.align_corners,
                 warning=False,
@@ -344,17 +338,17 @@ class DenseCLIP(BaseSegmentor):
         return preds
 
     def whole_inference(
-        self, img: torch.Tensor, img_meta: Sequence[Mapping], rescale: bool
+        self, img: torch.Tensor, batch_data_samples: SampleList, rescale: bool
     ):
         """Inference with full image."""
 
-        seg_logit = self.encode_decode(img, img_meta)
+        seg_logit = self.encode_decode(img, batch_data_samples)
         if rescale:
             # support dynamic shape for onnx
             if torch.onnx.is_in_onnx_export():
                 size = img.shape[2:]
             else:
-                size = img_meta[0]["ori_shape"][:2]
+                size = batch_data_samples[0].gt_sem_seg["ori_shape"][:2]
             seg_logit = resize(
                 seg_logit,
                 size=size,

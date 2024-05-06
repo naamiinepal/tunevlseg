@@ -5,6 +5,8 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from mmseg.models.builder import BACKBONES
+
 from .timm_utils import drop_path, trunc_normal_
 
 
@@ -134,6 +136,7 @@ class AttentionPool2d(nn.Module):
         return global_feat, feature_map
 
 
+@BACKBONES.register_module()
 class CLIPResNet(nn.Module):
     """
     A ResNet class that is similar to torchvision's but contains the following changes:
@@ -228,6 +231,7 @@ class CLIPResNet(nn.Module):
         return tuple(outs)
 
 
+@BACKBONES.register_module()
 class CLIPResNetWithAttention(nn.Module):
     """
     A ResNet class that is similar to torchvision's but contains the following changes:
@@ -523,6 +527,7 @@ class TransformerDecoderLayer(nn.Module):
         return x + self.dropout(self.mlp(self.norm3(x)))
 
 
+@BACKBONES.register_module()
 class CLIPVisionTransformer(nn.Module):
     def __init__(
         self,
@@ -710,7 +715,8 @@ class CLIPVisionTransformer(nn.Module):
         return tuple(features)
 
 
-class CLIPTextEncoder(nn.Module):
+@BACKBONES.register_module()
+class CustomCLIPTextEncoder(nn.Module):
     def __init__(
         self,
         context_length=77,
@@ -796,6 +802,7 @@ class CLIPTextEncoder(nn.Module):
         # x = self.out_proj(x)
 
 
+@BACKBONES.register_module()
 class CLIPTextContextEncoder(nn.Module):
     def __init__(
         self,
@@ -897,6 +904,7 @@ class CLIPTextContextEncoder(nn.Module):
         return x.reshape(B, K, self.embed_dim)
 
 
+@BACKBONES.register_module()
 class ContextDecoder(nn.Module):
     def __init__(
         self,

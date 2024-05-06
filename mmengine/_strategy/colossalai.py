@@ -6,25 +6,16 @@ from collections.abc import Callable
 from contextlib import contextmanager
 from typing import Any
 
-try:
-    import colossalai
-    import colossalai.booster.mixed_precision as colo_precision
-    import colossalai.booster.plugin as colo_plugin
-    import colossalai.nn.optimizer as colo_optimizer
-    from colossalai.booster import Booster
-    from colossalai.interface import ModelWrapper
-except Exception as e:  # noqa: F841
-    colossalai = None
-    colo_precision = None
-    colo_plugin = None
-    colo_optimizer = None
-    Booster = None
-    ModelWrapper = None
-
 import torch
-import torch.nn as nn
+from torch import nn
 
+import colossalai
+import colossalai.booster.mixed_precision as colo_precision
+import colossalai.booster.plugin as colo_plugin
+import colossalai.nn.optimizer as colo_optimizer
 import mmengine
+from colossalai.booster import Booster
+from colossalai.interface import ModelWrapper
 from mmengine import mkdir_or_exist
 from mmengine._strategy import BaseStrategy
 from mmengine.device import get_device

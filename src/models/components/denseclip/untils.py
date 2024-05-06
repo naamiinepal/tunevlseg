@@ -46,7 +46,7 @@ def bytes_to_unicode() -> dict[int, str]:
     return dict(zip(bs, cs, strict=True))
 
 
-T = TypeVar("T")  # Declare type variable for generics
+T = TypeVar("T")
 
 
 def get_pairs(word: Iterable[T]) -> set[tuple[T, T]]:
@@ -57,9 +57,7 @@ def get_pairs(word: Iterable[T]) -> set[tuple[T, T]]:
 
 
 def basic_clean(text: str) -> str:
-    text = ftfy.fix_text(text)
-    text = html.unescape(html.unescape(text))
-    return text.strip()
+    return html.unescape(ftfy.fix_text(text)).strip()
 
 
 def whitespace_clean(text: str) -> str:
@@ -76,6 +74,7 @@ class SimpleTokenizer:
         self.bpe_ranks = {m: i for i, m in enumerate(merges)}
 
         vocab = self.get_vocab(merges)
+
         self.decoder = dict(enumerate(vocab))
         self.encoder = {v: k for k, v in self.decoder.items()}
 
@@ -89,30 +88,29 @@ class SimpleTokenizer:
         )
 
     @staticmethod
-    def get_vocab(merges: Iterable[Iterable[str]]) -> tuple[str, ...]:
-        # Simplify the code above
-        unicode_tokens = bytes_to_unicode().values()
-
-        # add word boundary to unicode tokens
-        word_boundaries = (t + "</w>" for t in unicode_tokens)
-
-        # add special tokens
-        special_tokens = ("<|startoftext|>", "<|endoftext|>")
-
-        return (*unicode_tokens, *word_boundaries, *special_tokens)
-
-    @staticmethod
     def get_merges(
         bpe_path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
     ) -> tuple[tuple[str, ...], ...]:
-        with gzip.open(bpe_path, "rt", encoding="utf8") as f:
+        with gzip.open(bpe_path, mode="rt", encoding="utf-8") as f:
             merges = f.read().split("\n")
         merges = merges[1 : 49152 - 256 - 2 + 1]
         return tuple(tuple(merge.split()) for merge in merges)
 
+    def get_vocab(self, merges: Iterable[Iterable[str]]) -> tuple[str, ...]:
+        unicode_vocab = bytes_to_unicode().values()
+
+        special_word_tokens = (v + "</w>" for v in unicode_vocab)
+
+        merge_tokens = ("".join(merge) for merge in merges)
+
+        special_tokens = ("<|startoftext|>", "<|endoftext|>")
+
+        return (*unicode_vocab, *special_word_tokens, *special_tokens, *merge_tokens)
+
     def bpe(self, token: str) -> str:
-        if token in self.cache:
-            return self.cache[token]
+        cached_token = self.cache.get(token)
+        if cached_token is not None:
+            return cached_token
 
         word = (*token[:-1], token[-1] + "</w>")
         pairs = get_pairs(word)
@@ -156,16 +154,16 @@ class SimpleTokenizer:
         bpe_tokens: list[int] = []
         text = whitespace_clean(basic_clean(text)).lower()
         for token in re.findall(self.pat, text):
-            _token = "".join(self.byte_encoder[b] for b in token.encode("utf-8"))
+            byte_token = "".join(self.byte_encoder[b] for b in token.encode("utf-8"))
             bpe_tokens.extend(
-                self.encoder[bpe_token] for bpe_token in self.bpe(_token).split(" ")
+                self.encoder[bpe_token] for bpe_token in self.bpe(byte_token).split(" ")
             )
         return bpe_tokens
 
     def decode(self, tokens: Iterable[int]) -> str:
-        text = "".join([self.decoder[token] for token in tokens])
+        text = "".join(self.decoder[token] for token in tokens)
         return (
-            bytearray([self.byte_decoder[c] for c in text])
+            bytearray(self.byte_decoder[c] for c in text)
             .decode("utf-8", errors="replace")
             .replace("</w>", " ")
         )
@@ -191,22 +189,31 @@ def tokenize(
     -------
     A two-dimensional tensor containing the resulting tokens, shape = [number of input strings, context_length]
     """
-    if isinstance(texts, str):
-        texts = (texts,)
+    texts = (texts,) if isinstance(texts, str) else tuple(texts)
 
     sot_token = _tokenizer.encoder["<|startoftext|>"]
     eot_token = _tokenizer.encoder["<|endoftext|>"]
-    all_tokens = ((sot_token, *_tokenizer.encode(text), eot_token) for text in texts)
-    result: torch.LongTensor = torch.zeros(len(texts), context_length, dtype=torch.long)  # type:ignore
+    all_tokens = tuple(
+        (sot_token, *encoded_texts, eot_token)
+        for encoded_texts in map(_tokenizer.encode, texts)
+    )
+    result: torch.LongTensor = torch.zeros(  # type:ignore
+        len(all_tokens), context_length, dtype=torch.long
+    )
 
-    for i, (text, tokens) in enumerate(zip(texts, all_tokens, strict=True)):
+    for i, (tokens, text) in enumerate(
+        zip(
+            all_tokens,
+            texts,
+            strict=True,
+        )
+    ):
         if len(tokens) > context_length:
             if not truncate:
                 raise RuntimeError(
                     f"Input {text} is too long for context length {context_length}"
                 )
-            trunc_tokens = list(tokens[:context_length])
-            trunc_tokens[-1] = eot_token
+            trunc_tokens = (*tokens[: context_length - 1], eot_token)
         else:
             trunc_tokens = tokens
         result[i, : len(trunc_tokens)] = torch.tensor(trunc_tokens)
