@@ -4,6 +4,7 @@ import math
 from typing import TYPE_CHECKING, Any
 
 import torch
+from torch import nn
 from torch.nn import functional as F
 from transformers.modeling_outputs import BaseModelOutput
 from transformers.models.clipseg.modeling_clipseg import (
@@ -28,12 +29,39 @@ class MapleCLIPSeg(HFCLIPSegWrapper):
         model_cfg: Mapping[str, Any],
         context_learner: type[MapleContextLearner],
         freeze_all: bool = True,
+        no_freeze_last_layer: bool = False,
+        use_new_last_layer: bool = False,
     ) -> None:
         super().__init__(**model_cfg)
 
         if freeze_all:
             self.eval()
             self.requires_grad_(False)
+
+        if use_new_last_layer:
+            self.additive_decoder_layer = nn.Sequential(
+                nn.Upsample(
+                    scale_factor=float(self.model.config.vision_config.patch_size),
+                    mode="bilinear",
+                ),
+                nn.Conv2d(
+                    self.model.config.reduce_dim,
+                    1,
+                    kernel_size=5,
+                    padding="same",
+                    padding_mode="replicate",
+                ),
+            )
+        elif no_freeze_last_layer:
+            self.additive_decoder_layer = None
+
+            trans_conv = self.model.decoder.transposed_convolution
+            last_layer = (
+                trans_conv[-1]
+                if isinstance(trans_conv, torch.nn.Sequential)
+                else trans_conv
+            )
+            last_layer.requires_grad_(True)
 
         self.context_learner = context_learner(
             visual_dim=self.model.config.vision_config.hidden_size,
@@ -168,7 +196,6 @@ class MapleCLIPSeg(HFCLIPSegWrapper):
 
             if idx < self.context_learner.prompt_depth:
                 # Overwrite the prompts skipping the BOS Token till the prompt depth
-                # TODO: May be add? This would enable early fusion of the encoders
                 hidden_states[:, 1 : self.context_learner.num_context + 1] = (
                     self.context_learner.context_vectors[
                         idx
@@ -427,7 +454,6 @@ class MapleCLIPSeg(HFCLIPSegWrapper):
 
             if idx < self.context_learner.prompt_depth:
                 # Overwrite the prompts skipping the BOS Token till the prompt depth
-                # TODO: May be add? This would enable early fusion of the encoders
                 hidden_states[:, -self.context_learner.num_context :] = (
                     visual_context_vectors[idx].expand(hidden_states.size(0), -1, -1)
                 )
@@ -645,7 +671,12 @@ class MapleCLIPSeg(HFCLIPSegWrapper):
 
         output = output.view(B, H, size, size)
 
-        logits = _self.transposed_convolution(output).squeeze()
+        logits = _self.transposed_convolution(output)
+
+        if self.additive_decoder_layer is not None:
+            logits += self.additive_decoder_layer(output)
+
+        logits = logits.squeeze()
 
         all_hidden_states = tuple(all_hidden_states) if output_hidden_states else None
 

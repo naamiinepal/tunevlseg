@@ -233,10 +233,15 @@ class MapleContextLearner(BaseContextLearner):
             dim=1,
         )
 
-    def generate_visual_contexts(self) -> tuple[torch.Tensor, ...]:
+    def generate_visual_contexts(
+        self, text_prompts: Iterable[torch.Tensor] | None = None
+    ) -> tuple[torch.Tensor, ...]:
+        if text_prompts is None:
+            text_prompts = self.context_vectors
+
         return tuple(
             proj_layer(curr_ctx_vec)
             for proj_layer, curr_ctx_vec in zip(
-                self.projection_layers, self.context_vectors, strict=True
+                self.projection_layers, text_prompts, strict=False
             )
         )
