@@ -2,26 +2,15 @@ from abc import ABC, abstractmethod
 
 import torch
 
+from .base_visual_learner import BaseVisualLearner
 from .coop_context_learner import CoOpContextLearner
 
 
-class BaseSharedLearner(CoOpContextLearner, ABC):
+class BaseSharedLearner(CoOpContextLearner, BaseVisualLearner, ABC):
     @abstractmethod
     def get_transformed_textual_context(
         self, in_context: torch.Tensor | None = None, index: int = 0
     ) -> torch.Tensor: ...
-
-    @abstractmethod
-    def get_transformed_visual_context(
-        self, in_context: torch.Tensor | None = None, index: int = 0
-    ) -> torch.Tensor: ...
-
-    def mutate_image_hidden_states(
-        self, hidden_states: torch.Tensor, index: int
-    ) -> None:
-        hidden_states[:, -self.num_context :] = self.get_transformed_visual_context(
-            index=index
-        ).expand(hidden_states.size(0), -1, -1)
 
     def forward(
         self,

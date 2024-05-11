@@ -15,34 +15,17 @@ from transformers.models.clipseg.modeling_clipseg import (
 from .base_clipseg import BaseCLIPSeg
 
 if TYPE_CHECKING:
-    from .context_learner import CoCoOpContextLearner, CoOpContextLearner
+    from .context_learner import BaseSharedLearner, MapleContextLearner
 
 
-class COOPCLIPSeg(BaseCLIPSeg):
-    def __init__(
-        self,
-        context_learner: type[CoOpContextLearner | CoCoOpContextLearner],
-        *args,
-        **kwargs,
-    ) -> None:
-        super().__init__(*args, **kwargs)
-
-        self.context_learner = context_learner(
-            visual_dim=self.model.config.projection_dim,
-            max_network_depth=min(
-                self.model.config.text_config.num_hidden_layers,
-                self.model.config.vision_config.num_hidden_layers,
-            ),
-            context_dim=self.model.config.text_config.hidden_size,
-            embedding_layer=self.model.clip.text_model.embeddings.token_embedding,
-        )
+class BaseMultimodalCLIPSeg(BaseCLIPSeg):
+    context_learner: MapleContextLearner | BaseSharedLearner  # type:ignore
 
     def embeddings_forward(
         self,
         input_ids: torch.LongTensor | None = None,
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        image_features: torch.Tensor | None = None,
     ) -> torch.FloatTensor:
         _self = self.model.clip.text_model.embeddings
 
@@ -61,7 +44,6 @@ class COOPCLIPSeg(BaseCLIPSeg):
         inputs_embeds = self.context_learner(
             input_embeddings=inputs_embeds,
             max_length=self.model.config.text_config.max_position_embeddings,
-            image_features=image_features,
         )
 
         seq_length += self.context_learner.num_context
@@ -77,7 +59,6 @@ class COOPCLIPSeg(BaseCLIPSeg):
         inputs_embeds: torch.FloatTensor,
         attention_mask: torch.Tensor | None = None,
         causal_attention_mask: torch.Tensor | None = None,
-        image_features: torch.Tensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
@@ -159,9 +140,7 @@ class COOPCLIPSeg(BaseCLIPSeg):
             if idx < self.context_learner.prompt_depth:
                 # Overwrite the prompts skipping the BOS Token till the prompt depth
                 hidden_states = self.context_learner(
-                    input_embeddings=hidden_states,
-                    image_features=image_features,
-                    index=idx,
+                    input_embeddings=hidden_states, index=idx
                 )
 
             if output_attentions:
@@ -193,7 +172,6 @@ class COOPCLIPSeg(BaseCLIPSeg):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        image_features: torch.Tensor | None = None,
     ) -> tuple | BaseModelOutputWithPooling:
         _self = self.model.clip.text_model
 
@@ -221,7 +199,6 @@ class COOPCLIPSeg(BaseCLIPSeg):
         hidden_states = self.embeddings_forward(
             input_ids=input_ids,
             position_ids=position_ids,
-            image_features=image_features,
         )
 
         # CLIPSeg's text model uses causal mask, prepare it here.
@@ -249,7 +226,6 @@ class COOPCLIPSeg(BaseCLIPSeg):
             inputs_embeds=hidden_states,
             attention_mask=attention_mask,
             causal_attention_mask=causal_attention_mask,
-            image_features=image_features,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -306,11 +282,72 @@ class COOPCLIPSeg(BaseCLIPSeg):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        image_features: torch.Tensor | None = None,
     ) -> torch.FloatTensor:
         _self = self.model.clip
 
         # Use CLIPSEG model's config for some fields (if specified) instead of those of vision & text components.
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else _self.config.output_attentions
+        )
+        return_dict = (
+            return_dict if return_dict is not None else _self.config.use_return_dict
+        )
+
+        text_outputs = self.text_model_forward(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        pooled_output = text_outputs[1]
+
+        return _self.text_projection(pooled_output)
+
+    def vision_transformer_model_forward(
+        self,
+        inputs_embeds: torch.FloatTensor,
+        attention_mask: torch.Tensor | None = None,
+        causal_attention_mask: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+    ) -> tuple | BaseModelOutput:
+        r"""Args:
+        ----
+            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+                than the model's internal embedding lookup matrix.
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+                [What are attention masks?](../glossary#attention-mask)
+            causal_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Causal mask for the text model. Mask values selected in `[0, 1]`:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+                [What are attention masks?](../glossary#attention-mask)
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+            output_hidden_states (`bool`, *optional*):
+                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
+                for more detail.
+            return_dict (`bool`, *optional*):
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+
+        """
+        _self = self.model.clip.vision_model.encoder
         output_attentions = (
             output_attentions
             if output_attentions is not None
@@ -325,95 +362,193 @@ class COOPCLIPSeg(BaseCLIPSeg):
             return_dict if return_dict is not None else _self.config.use_return_dict
         )
 
-        text_outputs = self.text_model_forward(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
+        encoder_states = []
+        all_attentions = []
+
+        hidden_states = inputs_embeds
+
+        max_layer_idx = max(self.model.extract_layers)
+
+        for idx, encoder_layer in enumerate(_self.layers, 1):
+            if output_hidden_states:
+                encoder_states.append(hidden_states)
+
+            layer_outputs = (
+                _self._gradient_checkpointing_func(
+                    encoder_layer.__call__,
+                    hidden_states,
+                    attention_mask,
+                    causal_attention_mask,
+                    output_attentions,
+                )
+                if _self.gradient_checkpointing and _self.training
+                else encoder_layer(
+                    hidden_states,
+                    attention_mask,
+                    causal_attention_mask,
+                    output_attentions=output_attentions,
+                )
+            )
+
+            hidden_states = layer_outputs[0]
+
+            if idx < self.context_learner.prompt_depth:
+                # Change the last tokens, where they were concatenated
+                self.context_learner.mutate_image_hidden_states(
+                    hidden_states, index=idx
+                )
+
+            if output_attentions:
+                all_attentions.append(layer_outputs[1])
+
+            # No need to run the vision transformer for more layers
+            if idx > max_layer_idx:
+                break
+
+        encoder_states = (
+            (*encoder_states, hidden_states) if output_hidden_states else None
+        )
+
+        all_attentions = tuple(all_attentions) if output_attentions else None
+
+        if not return_dict:
+            return tuple(
+                v
+                for v in [hidden_states, encoder_states, all_attentions]
+                if v is not None
+            )
+        return BaseModelOutput(
+            last_hidden_state=hidden_states,
+            hidden_states=encoder_states,
+            attentions=all_attentions,
+        )
+
+    def vision_model_forward(
+        self,
+        pixel_values: torch.FloatTensor,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+    ) -> tuple | BaseModelOutput:
+        _self = self.model.clip.vision_model
+
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else _self.config.output_attentions
+        )
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else _self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else _self.config.use_return_dict
+        )
+
+        # shape: (batch_size, sequence_length, hidden_size)
+        hidden_states = _self.embeddings(pixel_values)
+
+        # Add te context to the hidden states at the last position
+        # shape: (num_context, context_dim)
+        first_visual_context_vector = self.context_learner.get_visual_context()
+
+        # Concat the context vector with the hidden states
+        hidden_states = torch.cat(
+            (
+                hidden_states,
+                first_visual_context_vector.expand(hidden_states.size(0), -1, -1),
+            ),
+            dim=1,
+        )
+
+        # Concat before the layernorm, concating after results in unstable training
+        hidden_states = _self.pre_layrnorm(hidden_states)
+
+        encoder_outputs = self.vision_transformer_model_forward(
+            inputs_embeds=hidden_states,  # type:ignore
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            image_features=image_features,
         )
 
-        pooled_output = text_outputs[1]
-        return _self.text_projection(pooled_output)
+        # last_hidden_state = encoder_outputs[0]
+        # pooled_output = last_hidden_state[:, 0, :]
+        # pooled_output = _self.post_layernorm(pooled_output)
+
+        if not return_dict:
+            return encoder_outputs
+
+        return BaseModelOutput(
+            hidden_states=encoder_outputs.hidden_states,  # type:ignore
+            attentions=encoder_outputs.attentions,  # type:ignore
+        )
 
     def get_vision_outputs(
         self,
-        pixel_values: torch.FloatTensor | None,
+        pixel_values: torch.FloatTensor,
         output_attentions: bool | None,
         output_hidden_states: bool | None,
     ) -> tuple[
-        list[torch.Tensor],
-        torch.FloatTensor,
-        BaseModelOutputWithPooling,
+        tuple[torch.Tensor, ...],
+        BaseModelOutput,
     ]:
         _self = self.model
 
-        vision_outputs = _self.clip.vision_model(
+        vision_outputs: BaseModelOutput = self.vision_model_forward(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=True,  # we need the intermediate hidden states
             return_dict=True,
-        )
-        pooled_output = _self.clip.visual_projection(vision_outputs[1])
+        )  # type:ignore
+        # pooled_output = _self.clip.visual_projection(vision_outputs[1])
 
         hidden_states = vision_outputs.hidden_states
-        # we add +1 here as the hidden states also include the initial embeddings
-        activations = [hidden_states[i + 1] for i in _self.extract_layers]
 
-        vision_outputs = BaseModelOutputWithPooling(
+        if hidden_states is None:
+            msg = "You have to specify output_hidden_states=True if you want to use `CLIPSegForImageSegmentation`"
+            raise ValueError(msg)
+
+        # we add +1 here as the hidden states also include the initial embeddings
+        activations = tuple(hidden_states[i + 1] for i in _self.extract_layers)
+
+        vision_outputs = BaseModelOutput(
             last_hidden_state=vision_outputs.last_hidden_state,
-            pooler_output=vision_outputs.pooler_output,
             hidden_states=hidden_states if output_hidden_states else None,
             attentions=vision_outputs.attentions,
         )
-        return activations, pooled_output, vision_outputs
+        return activations, vision_outputs
 
     def get_conditional_embeddings(
         self,
-        conditional_embeddings: torch.FloatTensor | None,
-        pixel_values: torch.FloatTensor,
-        input_ids: torch.LongTensor | None,
-        attention_mask: torch.Tensor | None,
-        conditional_pixel_values: torch.FloatTensor | None,
-        position_ids: torch.LongTensor | None,
-        image_features: torch.Tensor | None = None,
-    ):
-        _self = self.model
-        if conditional_embeddings is None:
-            batch_size = pixel_values.shape[0]
-            if input_ids is not None:
-                # compute conditional embeddings from texts
-                if len(input_ids) != batch_size:
-                    msg = "Make sure to pass as many prompt texts as there are query images"
-                    raise ValueError(msg)
-                return self.get_text_features(
-                    input_ids,
-                    attention_mask=attention_mask,
-                    position_ids=position_ids,
-                    image_features=image_features,
+        batch_size: int | None = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        conditional_pixel_values: torch.FloatTensor | None = None,
+    ) -> torch.FloatTensor:
+        if input_ids is not None:
+            # compute conditional embeddings from texts
+            if len(input_ids) != batch_size:
+                raise ValueError(
+                    "Make sure to pass as many prompt texts as there are query images"
                 )
 
-            if conditional_pixel_values is not None:
-                # compute conditional embeddings from images
-                if len(conditional_pixel_values) != batch_size:
-                    msg = "Make sure to pass as many prompt images as there are query images"
-                    raise ValueError(msg)
-                return _self.clip.get_image_features(conditional_pixel_values)
+            return self.get_text_features(
+                input_ids, attention_mask=attention_mask, position_ids=position_ids
+            )
 
-            msg = "Invalid conditional, should be either provided as `input_ids` or `conditional_pixel_values`"
-            raise ValueError(msg)
+        if conditional_pixel_values is not None:
+            # compute conditional embeddings from images
+            if len(conditional_pixel_values) != batch_size:
+                raise ValueError(
+                    "Make sure to pass as many prompt images as there are query images"
+                )
+            return self.model.clip.get_image_features(conditional_pixel_values)
 
-        if conditional_embeddings.shape[0] != pixel_values.shape[0]:
-            msg = "Make sure to pass as many conditional embeddings as there are query images in the batch"
-            raise ValueError(msg)
-
-        if conditional_embeddings.shape[1] != _self.config.projection_dim:
-            msg = "Make sure that the feature dimension of the conditional embeddings matches `config.projection_dim`."
-            raise ValueError(msg)
-
-        return conditional_embeddings
+        raise ValueError(
+            "Invalid conditional, should be either provided as `input_ids` or `conditional_pixel_values`"
+        )
 
     def model_forward(
         self,
@@ -430,55 +565,66 @@ class COOPCLIPSeg(BaseCLIPSeg):
     ) -> CLIPSegImageSegmentationOutput:
         _self = self.model
 
+        return_dict = (
+            return_dict if return_dict is not None else _self.config.use_return_dict
+        )
+
         if pixel_values is None:
             msg = (
                 "You have to specify pixel_values to use `CLIPSegForImageSegmentation`"
             )
             raise ValueError(msg)
 
-        return_dict = (
-            return_dict if return_dict is not None else _self.config.use_return_dict
-        )
-
+        # NOTE: Get the output of visual transformer first to keep textual shared
+        # tokens in the cache. Since textual dim is less than visual dim, this results
+        # in low memory usage and low CPU and GPU communication overhead.
         # step 1: forward the query images through the frozen CLIP vision encoder
-        activations, pooled_output, vision_outputs = self.get_vision_outputs(
+        activations, vision_outputs = self.get_vision_outputs(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
         )
 
         # step 2: compute conditional embeddings, either from text, images or an own provided embedding
-        conditional_embeddings = self.get_conditional_embeddings(
-            conditional_embeddings=conditional_embeddings,
-            pixel_values=pixel_values,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            conditional_pixel_values=conditional_pixel_values,
-            position_ids=position_ids,
-            image_features=pooled_output,
-        )
+        if conditional_embeddings is None:
+            conditional_embeddings = self.get_conditional_embeddings(
+                batch_size=pixel_values.shape[0],
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                conditional_pixel_values=conditional_pixel_values,
+            )
+        else:
+            if conditional_embeddings.shape[0] != pixel_values.shape[0]:
+                raise ValueError(
+                    "Make sure to pass as many conditional embeddings as there are query images in the batch"
+                )
+            if conditional_embeddings.shape[1] != self.config.projection_dim:
+                raise ValueError(
+                    "Make sure that the feature dimension of the conditional embeddings matches"
+                    " `config.projection_dim`."
+                )
 
         # step 3: forward both the pooled output and the activations through the lightweight decoder to predict masks
-        decoder_outputs = _self.decoder(
+        decoder_outputs = self.decoder_forward(
             activations,
             conditional_embeddings,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        logits = decoder_outputs.logits if return_dict else decoder_outputs[0]
+        logits = decoder_outputs[0]
 
-        loss: torch.FloatTensor | None = (  # type: ignore
+        loss = (
             None
             if labels is None
             else F.binary_cross_entropy_with_logits(logits, labels)
         )
 
         return CLIPSegImageSegmentationOutput(
-            loss=loss,
+            loss=loss,  # type:ignore
             logits=logits,
             conditional_embeddings=conditional_embeddings,
-            pooled_output=pooled_output,
             vision_model_output=vision_outputs,  # type:ignore
-            decoder_output=decoder_outputs,
+            decoder_output=decoder_outputs,  # type:ignore
         )

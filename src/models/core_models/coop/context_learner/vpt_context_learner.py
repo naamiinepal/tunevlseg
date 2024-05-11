@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 import torch
 
-from .base_unimodal_learner import BaseUnimodalLearner
+from .base_visual_learner import BaseVisualLearner
 
 if TYPE_CHECKING:
     from transformers import PreTrainedTokenizerBase
@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from .base_unimodal_learner import EmbeddingLayerType
 
 
-class VPTContextLearner(BaseUnimodalLearner):
+class VPTContextLearner(BaseVisualLearner):
     def __init__(self, **kwargs) -> None:
         kwargs["context_initializer"] = None
         kwargs["tokenizer"] = None
@@ -24,7 +24,7 @@ class VPTContextLearner(BaseUnimodalLearner):
         self,
         num_context: int | None = None,
         context_dim: int | None = None,
-        prompt_depth: int = BaseUnimodalLearner.MIN_PROMPT_DEPTH,
+        prompt_depth: int = BaseVisualLearner.MIN_PROMPT_DEPTH,
         context_initializer: str | list[str] | None = None,
         tokenizer: PreTrainedTokenizerBase | None = None,
         embedding_layer: EmbeddingLayerType | None = None,
@@ -38,12 +38,10 @@ class VPTContextLearner(BaseUnimodalLearner):
             (prompt_depth, num_context, context_dim), std=vector_std
         )
 
-    def mutate_image_hidden_states(
-        self, hidden_states: torch.Tensor, index: int
-    ) -> None:
-        hidden_states[:, -self.num_context :] = self.context_vectors[index].expand(
-            hidden_states.size(0), -1, -1
-        )
+    def get_visual_context(
+        self, in_context: torch.Tensor | None = None, index: int = 0
+    ) -> torch.Tensor:
+        return self.context_vectors[index]
 
     def forward(
         self,

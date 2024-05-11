@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import math
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import torch
-from torch import nn
 from torch.nn import functional as F
 from transformers.modeling_outputs import BaseModelOutput
 from transformers.models.clipseg.modeling_clipseg import (
@@ -12,53 +11,19 @@ from transformers.models.clipseg.modeling_clipseg import (
     CLIPSegImageSegmentationOutput,
 )
 
-from src.models.components.hf_clipseg_wrapper import HFCLIPSegWrapper
+from .base_clipseg import BaseCLIPSeg
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
+    from collections.abc import Sequence
 
     from .context_learner import VPTContextLearner
 
 
-class VPTCLIPSeg(HFCLIPSegWrapper):
+class VPTCLIPSeg(BaseCLIPSeg):
     def __init__(
-        self,
-        model_cfg: Mapping[str, Any],
-        context_learner: type[VPTContextLearner],
-        freeze_all: bool = True,
-        no_freeze_last_layer: bool = False,
-        use_new_last_layer: bool = False,
+        self, context_learner: type[VPTContextLearner], *args, **kwargs
     ) -> None:
-        super().__init__(**model_cfg)
-
-        if freeze_all:
-            self.eval()
-            self.requires_grad_(False)
-
-        if use_new_last_layer:
-            self.additive_decoder_layer = nn.Sequential(
-                nn.Upsample(
-                    scale_factor=float(self.model.config.vision_config.patch_size),
-                    mode="bilinear",
-                ),
-                nn.Conv2d(
-                    self.model.config.reduce_dim,
-                    1,
-                    kernel_size=5,
-                    padding="same",
-                    padding_mode="replicate",
-                ),
-            )
-        elif no_freeze_last_layer:
-            self.additive_decoder_layer = None
-
-            trans_conv = self.model.decoder.transposed_convolution
-            last_layer = (
-                trans_conv[-1]
-                if isinstance(trans_conv, torch.nn.Sequential)
-                else trans_conv
-            )
-            last_layer.requires_grad_(True)
+        super().__init__(*args, **kwargs)
 
         self.context_learner = context_learner(
             max_network_depth=min(
@@ -428,15 +393,3 @@ class VPTCLIPSeg(HFCLIPSegWrapper):
             vision_model_output=vision_outputs,  # type:ignore
             decoder_output=decoder_outputs,  # type:ignore
         )
-
-    def forward(
-        self,
-        text_input: Mapping[str, torch.Tensor],
-        image_input: torch.Tensor,
-    ):
-        B, _, H, W = image_input.shape
-
-        # The output is squeezed so it may be (H, W) or (B, H, W)
-        outputs = self.model_forward(**text_input, pixel_values=image_input)  # type:ignore
-
-        return outputs.logits.view(B, 1, H, W)

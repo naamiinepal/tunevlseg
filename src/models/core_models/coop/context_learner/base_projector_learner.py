@@ -11,8 +11,8 @@ class BaseProjectorLearner(CoOpContextLearner):
     def __init__(
         self,
         *,
-        proj_in_dim: int,
-        proj_out_dim: int,
+        proj_in_dim: int | None,
+        proj_out_dim: int | None,
         prompt_depth: int = CoOpContextLearner.MIN_PROMPT_DEPTH,
         use_unified_projection: bool = True,
         intermediate_dim: int | Iterable[int] | None = None,
@@ -26,8 +26,8 @@ class BaseProjectorLearner(CoOpContextLearner):
         super().__init__(prompt_depth=prompt_depth, **kwargs)
 
         projection_init_kwargs = {
-            "in_dim": proj_in_dim,
-            "out_dim": proj_out_dim,
+            "in_dim": proj_in_dim if proj_in_dim is None else self.context_dim,
+            "out_dim": proj_out_dim if proj_out_dim is None else self.context_dim,
             "intermediate_dim": intermediate_dim,
             "use_final_norm": use_proj_norm,
         }

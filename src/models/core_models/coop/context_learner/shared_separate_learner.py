@@ -76,7 +76,7 @@ class SharedSeparateLearner(BaseSharedLearner):
 
         return self.textual_projection_layers[index](in_context)
 
-    def get_transformed_visual_context(
+    def get_visual_context(
         self, in_context: torch.Tensor | None = None, index: int = 0
     ) -> torch.Tensor:
         if in_context is None:

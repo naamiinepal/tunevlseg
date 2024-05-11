@@ -94,7 +94,7 @@ class SharedAttnLearner(BaseSharedLearner):
             *args, is_curr_branch_textual=True, **kwargs
         )
 
-    def get_transformed_visual_context(self, *args, **kwargs) -> torch.Tensor:
+    def get_visual_context(self, *args, **kwargs) -> torch.Tensor:
         return self._get_combined_transformed_context(
             *args, is_curr_branch_textual=False, **kwargs
         )

@@ -1,3 +1,6 @@
+from .base_shared_learner import BaseSharedLearner as BaseSharedLearner
+from .base_unimodal_learner import BaseUnimodalLearner as BaseUnimodalLearner
+from .base_visual_learner import BaseVisualLearner as BaseVisualLearner
 from .cocoop_context_learner import CoCoOpContextLearner as CoCoOpContextLearner
 from .coop_context_learner import CoOpContextLearner as CoOpContextLearner
 from .maple_context_learner import MapleContextLearner as MapleContextLearner
