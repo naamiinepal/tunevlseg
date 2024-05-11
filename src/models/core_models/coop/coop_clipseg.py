@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 from torch.nn import functional as F
+from transformers.modeling_outputs import BaseModelOutput
 from transformers.models.clipseg.modeling_clipseg import (
     BaseModelOutputWithPooling,
     CLIPSegImageSegmentationOutput,
@@ -34,6 +35,10 @@ class COOPCLIPSeg(HFCLIPSegWrapper):
 
         self.context_learner = context_learner(
             visual_dim=self.model.config.projection_dim,
+            max_network_depth=min(
+                self.model.config.text_config.num_hidden_layers,
+                self.model.config.vision_config.num_hidden_layers,
+            ),
             context_dim=self.model.config.text_config.hidden_size,
             embedding_layer=self.model.clip.text_model.embeddings.token_embedding,
         )
@@ -44,7 +49,7 @@ class COOPCLIPSeg(HFCLIPSegWrapper):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         image_features: torch.Tensor | None = None,
-    ) -> torch.Tensor:
+    ) -> torch.FloatTensor:
         _self = self.model.clip.text_model.embeddings
 
         if input_ids is None:
@@ -72,6 +77,119 @@ class COOPCLIPSeg(HFCLIPSegWrapper):
 
         position_embeddings = _self.position_embedding(position_ids)
         return inputs_embeds + position_embeddings
+
+    def text_transformer_model_forward(
+        self,
+        inputs_embeds: torch.FloatTensor,
+        attention_mask: torch.Tensor | None = None,
+        causal_attention_mask: torch.Tensor | None = None,
+        image_features: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+    ) -> tuple | BaseModelOutput:
+        r"""Args:
+        ----
+            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+                than the model's internal embedding lookup matrix.
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+                [What are attention masks?](../glossary#attention-mask)
+            causal_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Causal mask for the text model. Mask values selected in `[0, 1]`:
+
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+
+                [What are attention masks?](../glossary#attention-mask)
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+            output_hidden_states (`bool`, *optional*):
+                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
+                for more detail.
+            return_dict (`bool`, *optional*):
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+
+        """
+        _self = self.model.clip.text_model.encoder
+
+        output_attentions = (
+            output_attentions
+            if output_attentions is not None
+            else _self.config.output_attentions
+        )
+        output_hidden_states = (
+            output_hidden_states
+            if output_hidden_states is not None
+            else _self.config.output_hidden_states
+        )
+        return_dict = (
+            return_dict if return_dict is not None else _self.config.use_return_dict
+        )
+
+        encoder_states = []
+        all_attentions = []
+
+        hidden_states = inputs_embeds
+        # Start index from 1 since we have already embedded one in the embeddings_forward
+        for idx, encoder_layer in enumerate(_self.layers, 1):
+            if output_hidden_states:
+                encoder_states.append(hidden_states)
+
+            layer_outputs: tuple[torch.FloatTensor, ...] = (
+                _self._gradient_checkpointing_func(
+                    encoder_layer.__call__,
+                    hidden_states,
+                    attention_mask,
+                    causal_attention_mask,
+                    output_attentions,
+                )
+                if _self.gradient_checkpointing and _self.training
+                else encoder_layer(
+                    hidden_states,
+                    attention_mask,
+                    causal_attention_mask,
+                    output_attentions=output_attentions,
+                )
+            )
+
+            hidden_states = layer_outputs[0]
+
+            if idx < self.context_learner.prompt_depth:
+                # Overwrite the prompts skipping the BOS Token till the prompt depth
+                hidden_states = self.context_learner(
+                    input_embeddings=hidden_states,
+                    image_features=image_features,
+                    index=idx,
+                )
+
+            if output_attentions:
+                all_attentions.append(layer_outputs[1])
+
+        encoder_states = (
+            (*encoder_states, hidden_states) if output_hidden_states else None
+        )
+
+        all_attentions = tuple(all_attentions) if output_attentions else None
+
+        if not return_dict:
+            return tuple(
+                v
+                for v in (hidden_states, encoder_states, all_attentions)
+                if v is not None
+            )
+        return BaseModelOutput(
+            last_hidden_state=hidden_states,
+            hidden_states=encoder_states,
+            attentions=all_attentions,
+        )
 
     def text_model_forward(
         self,
@@ -133,10 +251,11 @@ class COOPCLIPSeg(HFCLIPSegWrapper):
                 hidden_states.dtype,
             )
 
-        encoder_outputs = _self.encoder(
+        encoder_outputs = self.text_transformer_model_forward(
             inputs_embeds=hidden_states,
             attention_mask=attention_mask,
             causal_attention_mask=causal_attention_mask,
+            image_features=image_features,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -181,8 +300,8 @@ class COOPCLIPSeg(HFCLIPSegWrapper):
         return BaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
-            hidden_states=encoder_outputs.hidden_states,
-            attentions=encoder_outputs.attentions,
+            hidden_states=encoder_outputs.hidden_states,  # type:ignore
+            attentions=encoder_outputs.attentions,  # type:ignore
         )
 
     def get_text_features(

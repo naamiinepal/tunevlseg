@@ -29,6 +29,7 @@ class COOPCRIS(CRIS):
             self.requires_grad_(False)
 
         self.context_learner = context_learner(
+            max_network_depth=self.backbone.transformer.layers,
             visual_dim=self.backbone.visual.output_dim,
             context_dim=self.word_dim,
             embedding_layer=self.backbone.token_embedding,
@@ -39,7 +40,7 @@ class COOPCRIS(CRIS):
         # Since image features is not needed for CoOp, no need for an extra computation
         self.image_features_pooler_or_identity = (
             self._pool_4D_tensor
-            if context_learner != CoOpContextLearner
+            if isinstance(context_learner, CoCoOpContextLearner)
             else nn.Identity()
         )
 
@@ -62,6 +63,38 @@ class COOPCRIS(CRIS):
             max_length=self.max_length,
         )
 
+    def text_trasnformer_forward(
+        self,
+        x: torch.Tensor,
+        image_features: torch.Tensor | None = None,
+        *args,
+        **kwargs,
+    ) -> torch.Tensor:
+        seq_length = x.size(0)
+        attn_mask = torch.triu(
+            torch.ones(seq_length, seq_length, device=x.device, dtype=torch.bool),
+            diagonal=1,
+        )
+
+        for idx, block in enumerate(self.backbone.transformer.resblocks):
+            # shape: (seq_length, batch_size, d_model)
+            x = block(x, *args, **kwargs, attn_mask=attn_mask)
+
+            if idx < self.context_learner.prompt_depth:
+                # shape: (batch_size, seq_length, d_model)
+                x = x.movedim(0, 1)
+
+                # Overwrite the prompts skipping the BOS Token till the prompt depth
+                # shape: (batch_size, seq_length, d_model)
+                x = self.context_learner(
+                    input_embeddings=x, image_features=image_features, index=idx
+                )
+
+                # shape: (seq_length, batch_size, d_model)
+                x = x.movedim(1, 0)
+
+        return x
+
     def encode_text(
         self,
         text: torch.Tensor,
@@ -81,7 +114,7 @@ class COOPCRIS(CRIS):
 
         x += _self.positional_embedding[: x.size(1)]
         x = x.permute(1, 0, 2)  # NLD -> LND
-        x = _self.transformer(x, *args, **kwargs)
+        x = self.text_trasnformer_forward(x, image_features, *args, **kwargs)
         x = x.permute(1, 0, 2)  # LND -> NLD
         x = _self.ln_final(x)
 

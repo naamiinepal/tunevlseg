@@ -20,14 +20,14 @@ from src.models.components.hf_clipseg_wrapper import HFCLIPSegWrapper
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
-    from .context_learner import MapleContextLearner
+    from .context_learner import SharedAttnLearner
 
 
-class MapleCLIPSeg(HFCLIPSegWrapper):
+class SharedAttnCLIPSeg(HFCLIPSegWrapper):
     def __init__(
         self,
         model_cfg: Mapping[str, Any],
-        context_learner: type[MapleContextLearner],
+        context_learner: type[SharedAttnLearner],
         freeze_all: bool = True,
         no_freeze_last_layer: bool = False,
         use_new_last_layer: bool = False,
@@ -64,13 +64,13 @@ class MapleCLIPSeg(HFCLIPSegWrapper):
             last_layer.requires_grad_(True)
 
         self.context_learner = context_learner(
+            textual_dim=self.model.config.text_config.hidden_size,
             visual_dim=self.model.config.vision_config.hidden_size,
             max_network_depth=min(
                 self.model.config.text_config.num_hidden_layers,
                 self.model.config.vision_config.num_hidden_layers,
             ),
             context_dim=self.model.config.text_config.hidden_size,
-            embedding_layer=self.model.clip.text_model.embeddings.token_embedding,
         )
 
     def embeddings_forward(
@@ -503,7 +503,9 @@ class MapleCLIPSeg(HFCLIPSegWrapper):
 
         # Add te context to the hidden states at the last position
         # shape: (num_context, context_dim)
-        first_visual_context_vector = self.context_learner.get_transformed_context()
+        first_visual_context_vector = (
+            self.context_learner.get_transformed_visual_context()
+        )
 
         # Concat the context vector with the hidden states
         hidden_states = torch.cat(
@@ -711,8 +713,18 @@ class MapleCLIPSeg(HFCLIPSegWrapper):
             )
             raise ValueError(msg)
 
+        # NOTE: Get the output of visual transformer first to keep textual shared
+        # tokens in the cache. Since textual dim is less than visual dim, this results
+        # in low memory usage and low CPU and GPU communication overhead.
+        # step 1: forward the query images through the frozen CLIP vision encoder
+        activations, vision_outputs = self.get_vision_outputs(
+            pixel_values=pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+        )
+
+        # step 2: compute conditional embeddings, either from text, images or an own provided embedding
         if conditional_embeddings is None:
-            # step 1: compute conditional embeddings, either from text, images or an own provided embedding
             conditional_embeddings = self.get_conditional_embeddings(
                 batch_size=pixel_values.shape[0],
                 input_ids=input_ids,
@@ -730,13 +742,6 @@ class MapleCLIPSeg(HFCLIPSegWrapper):
                     "Make sure that the feature dimension of the conditional embeddings matches"
                     " `config.projection_dim`."
                 )
-
-        # step 2: forward the query images through the frozen CLIP vision encoder
-        activations, vision_outputs = self.get_vision_outputs(
-            pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-        )
 
         # step 3: forward both the pooled output and the activations through the lightweight decoder to predict masks
         decoder_outputs = self.decoder_forward(

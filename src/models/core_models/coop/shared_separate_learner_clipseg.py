@@ -20,14 +20,14 @@ from src.models.components.hf_clipseg_wrapper import HFCLIPSegWrapper
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
-    from .context_learner import MapleContextLearner
+    from .context_learner import SharedSeparateLearner
 
 
-class MapleCLIPSeg(HFCLIPSegWrapper):
+class SharedSeparateCLIPSeg(HFCLIPSegWrapper):
     def __init__(
         self,
         model_cfg: Mapping[str, Any],
-        context_learner: type[MapleContextLearner],
+        context_learner: type[SharedSeparateLearner],
         freeze_all: bool = True,
         no_freeze_last_layer: bool = False,
         use_new_last_layer: bool = False,
@@ -64,6 +64,7 @@ class MapleCLIPSeg(HFCLIPSegWrapper):
             last_layer.requires_grad_(True)
 
         self.context_learner = context_learner(
+            textual_dim=self.model.config.text_config.hidden_size,
             visual_dim=self.model.config.vision_config.hidden_size,
             max_network_depth=min(
                 self.model.config.text_config.num_hidden_layers,
@@ -503,7 +504,9 @@ class MapleCLIPSeg(HFCLIPSegWrapper):
 
         # Add te context to the hidden states at the last position
         # shape: (num_context, context_dim)
-        first_visual_context_vector = self.context_learner.get_transformed_context()
+        first_visual_context_vector = (
+            self.context_learner.get_transformed_visual_context()
+        )
 
         # Concat the context vector with the hidden states
         hidden_states = torch.cat(
