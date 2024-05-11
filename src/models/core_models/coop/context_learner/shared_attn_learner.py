@@ -3,17 +3,17 @@ import copy
 import torch
 from torch import nn
 
-from .coop_context_learner import CoOpContextLearner
+from .base_shared_learner import BaseSharedLearner
 
 
-class SharedAttnLearner(CoOpContextLearner):
+class SharedAttnLearner(BaseSharedLearner):
     def __init__(
         self,
         *,
         textual_dim: int,
         visual_dim: int,
         unified_projector: type[nn.TransformerEncoderLayer] | None = None,
-        prompt_depth: int = CoOpContextLearner.MIN_PROMPT_DEPTH,
+        prompt_depth: int = BaseSharedLearner.MIN_PROMPT_DEPTH,
         use_unified_projection: bool = True,
         **kwargs,
     ) -> None:
@@ -41,7 +41,7 @@ class SharedAttnLearner(CoOpContextLearner):
         self._computed_textual_context_cache: dict[int, torch.Tensor] = {}
         self._computed_visual_context_cache: dict[int, torch.Tensor] = {}
 
-    def get_transformed_context(
+    def _get_combined_transformed_context(
         self,
         is_curr_branch_textual: bool,
         in_context: torch.Tensor | None = None,
@@ -90,60 +90,11 @@ class SharedAttnLearner(CoOpContextLearner):
         return return_val
 
     def get_transformed_textual_context(self, *args, **kwargs) -> torch.Tensor:
-        return self.get_transformed_context(
+        return self._get_combined_transformed_context(
             *args, is_curr_branch_textual=True, **kwargs
         )
 
     def get_transformed_visual_context(self, *args, **kwargs) -> torch.Tensor:
-        return self.get_transformed_context(
+        return self._get_combined_transformed_context(
             *args, is_curr_branch_textual=False, **kwargs
-        )
-
-    def mutate_image_hidden_states(
-        self, hidden_states: torch.Tensor, index: int
-    ) -> None:
-        hidden_states[:, -self.num_context :] = self.get_transformed_visual_context(
-            index=index
-        ).expand(hidden_states.size(0), -1, -1)
-
-    def forward(
-        self,
-        *,
-        input_embeddings: torch.Tensor,
-        max_length: int | None = None,
-        image_features: torch.Tensor | None = None,
-        context_vectors: torch.Tensor | None = None,
-        index: int = 0,
-    ) -> torch.Tensor:
-        # input_embeddings: (batch, context_length, context_dim)
-        # BOS Token
-        first_embed = input_embeddings[:, :1, :]
-
-        # Get the embeddings from the middle
-        mid_embed_last_idx = (
-            -1
-            if max_length is None
-            else min(max_length - self.num_context, input_embeddings.size(1)) - 1
-        )
-
-        # If max_length is provided, reduce the embeddings while preserving the EOS token
-        mid_embed = input_embeddings[:, 1:mid_embed_last_idx, :]
-
-        # May or may not be EOS Token, but doing this preserves the last token
-        last_embed = input_embeddings[:, -1:, :]
-
-        if context_vectors is None:
-            context_vectors = self.get_transformed_textual_context(
-                in_context=context_vectors,
-                index=index,
-            )
-
-        return torch.cat(
-            (
-                first_embed,
-                context_vectors.expand(input_embeddings.size(0), -1, -1),
-                mid_embed,
-                last_embed,
-            ),
-            dim=1,
         )
