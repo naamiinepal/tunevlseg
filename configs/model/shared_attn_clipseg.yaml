@@ -1,31 +1,24 @@
 _target_: src.models.image_text_mask_module.ImageTextMaskModule
 
 net:
-  _target_: src.models.core_models.coop.COOPCRIS
+  _target_: src.models.core_models.coop.SharedAttnCLIPSeg
   model_cfg:
-    clip_pretrain: pretrain/RN50.pt
-    fpn_in: [512, 1024, 1024]
-    fpn_out: [256, 512, 1024]
-    vis_dim: 512
-    word_dim: 1024
-    num_layers: 3
-    num_head: 8
-    dim_ffn: 2048
-    dropout: 0.2
-    return_intermediate: false
-    img_size: ${img_size}
-    freeze_encoder: true
-    cris_pretrain: pretrain/cris_best_single.pth
+    pretrained_model_name_or_path: ${model_pretrained_path}
+    freeze_encoder: false
+    freeze_decoder: false
   context_learner:
-    _target_: src.models.core_models.coop.context_learner.CoOpContextLearner
+    _target_: src.models.core_models.coop.context_learner.SharedAttnLearner
     _partial_: true
     prompt_depth: 1
+    use_unified_projection: false
     num_context: 4
-    context_initializer: "a photo of a"
     vector_std: 0.02
-    tokenizer:
-      _target_: transformers.AutoTokenizer.from_pretrained
-      pretrained_model_name_or_path: ${tokenizer_pretrained_path}
+    unified_projector:
+      _target_: torch.nn.TransformerEncoderLayer
+      _partial_: true
+      nhead: 16
+      dim_feedforward: 1536
+      dropout: 0.25
   freeze_all: true
   no_freeze_last_layer: false
   use_new_last_layer: true
@@ -42,7 +35,7 @@ weight_decay: 0.0
 optimizer:
   _target_: torch.optim.AdamW
   _partial_: true
-  lr: 2.0e-5
+  lr: 2.0e-4
 
 # lr_scheduler_config:
 #   interval: step

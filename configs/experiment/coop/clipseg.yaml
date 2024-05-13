@@ -28,6 +28,8 @@ trainer:
   log_every_n_steps: 6
 
 model:
+  net:
+    use_new_last_layer: true
   weight_decay: 0.0
   optimizer:
     lr: 2.0e-4
@@ -51,13 +53,13 @@ logger:
 # Additional parameters    #
 ############################
 
-ds_name: kvasir_polyp
+ds_name: ??
 dataset_root: ${data_root}/${ds_name}
 
 model_pretrained_path: CIDAS/clipseg-rd64
 tokenizer_pretrained_path: ${model_pretrained_path}
 
-exp_name: "ds_${ds_name}_model_${model_pretrained_path}_img_${img_size}_b${data.batch_size}_lr${model.optimizer.lr}_p${trainer.precision}"
+exp_name: "ds_${ds_name}_model_${model_pretrained_path}_img_${img_size}_b${data.batch_size}_lr${model.optimizer.lr}_p${trainer.precision}_w${model.weight_decay}"
 
 img_size: 352
 img_mean: [0.485, 0.456, 0.406]

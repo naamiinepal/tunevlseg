@@ -31,11 +31,12 @@ model:
   net:
     model_cfg:
       dropout: 0
+    use_new_last_layer: true
   weight_decay: 0.0
   optimizer:
     lr: 2.0e-4
   compile: false # Torch compile works only when CUDA Compat >= 7.0
-  loss_fnword:
+  loss_fn:
     lambda_dice: 1
     lambda_ce: 0.2
 
@@ -54,12 +55,12 @@ logger:
 # Additional parameters    #
 ############################
 
-ds_name: kvasir_polyp
+ds_name: ??
 dataset_root: ${data_root}/${ds_name}
 
 tokenizer_pretrained_path: CIDAS/clipseg-rd64
 
-exp_name: "model_CRIS_img_${img_size}_b${data.batch_size}_lr${model.optimizer.lr}_p${trainer.precision}"
+exp_name: "ds_${ds_name}_model_CRIS_img_${img_size}_b${data.batch_size}_lr${model.optimizer.lr}_p${trainer.precision}_w${model.weight_decay}"
 
 img_size: 416
 img_mean: [0.48145466, 0.4578275, 0.40821073]
@@ -70,6 +71,7 @@ override_prompt: null
 max_length: null
 return_tensors: pt
 
+insert_stop_at_last: true
 predict: false
 
 # Image pre-processing configs
@@ -81,29 +83,26 @@ train_transforms:
       height: ${img_size}
       width: ${img_size}
       interpolation: ${import_eval:cv2.INTER_CUBIC}
-    # - _target_: albumentations.Rotate
-    #   limit: 10
-    #   interpolation: ${import_eval:cv2.INTER_CUBIC}
-    #   border_mode: ${import_eval:cv2.BORDER_REPLICATE}
-    #   p: 0.2
-    # - _target_: albumentations.RandomScale
-    #   scale_limit: 0.1
-    #   interpolation: ${import_eval:cv2.INTER_CUBIC}
-    #   p: 0.2
-    # - _target_: albumentations.PadIfNeeded
-    #   min_height: ${img_size}
-    #   min_width: ${img_size}
-    #   border_mode: ${import_eval:cv2.BORDER_REPLICATE}
-    # - _target_: albumentations.CropNonEmptyMaskIfExists
-    #   width: ${img_size}
-    #   height: ${img_size}
-    # - _target_: albumentations.RandomBrightnessContrast
-    #   contrast_limit: 0.1
-    #   brightness_limit: 0.1
-    #   brightness_by_max: false
-    #   p: 0.2
-    - _target_: albumentations.HorizontalFlip
-      p: 0.5
+    - _target_: albumentations.Affine
+      scale: [0.98, 1.02]
+      translate_percent: [-0.02, 0.02]
+      rotate: [-5, 5]
+      interpolation: ${import_eval:cv2.INTER_CUBIC}
+      mode: ${import_eval:cv2.BORDER_REPLICATE}
+      p: 0.2
+    - _target_: albumentations.PadIfNeeded
+      min_height: ${img_size}
+      min_width: ${img_size}
+      border_mode: ${import_eval:cv2.BORDER_REPLICATE}
+    - _target_: albumentations.CropNonEmptyMaskIfExists
+      width: ${img_size}
+      height: ${img_size}
+    - _target_: albumentations.RandomBrightnessContrast
+      contrast_limit: 0.1
+      brightness_limit: 0.1
+      p: 0.2
+    # - _target_: albumentations.Flip
+    #   p: 0.5
     - _target_: albumentations.Normalize
       mean: ${img_mean}
       std: ${img_std}

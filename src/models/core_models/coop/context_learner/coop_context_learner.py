@@ -49,17 +49,12 @@ class CoOpContextLearner(BaseUnimodalLearner):
             tokenizer,
         )
 
-        remaining_prompt_depth = prompt_depth - len(initialized_context_vectors)
+        initialized_depth, num_context, context_dim = initialized_context_vectors.shape
+
+        remaining_prompt_depth = prompt_depth - initialized_depth
 
         if remaining_prompt_depth == 0:
             return initialized_context_vectors
-
-        if num_context is None or context_dim is None:
-            msg = (
-                "`num_context` and `context_dim` must be specified if `context_initializer` is not None "
-                "and the length of `context_initializer` is less than `prompt_depth`"
-            )
-            raise ValueError(msg)
 
         random_context_vectors = self.init_random_context_vectors(
             (remaining_prompt_depth, num_context, context_dim), std=vector_std
@@ -118,6 +113,26 @@ class CoOpContextLearner(BaseUnimodalLearner):
     ) -> torch.Tensor:
         return self._update_mask_for_context(pad_mask, "zeros", max_length)
 
+    def get_textual_context(
+        self,
+        in_context: torch.Tensor | None = None,
+        image_features: torch.Tensor | None = None,
+        index: int = 0,
+    ) -> torch.Tensor:
+        return self.context_vectors[index]
+
+    def mutate_text_hidden_states(
+        self,
+        hidden_states: torch.Tensor,
+        index: int,
+        image_features: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        hidden_states[:, 1 : self.num_context + 1] = self.get_textual_context(
+            image_features=image_features, index=index
+        )
+
+        return hidden_states
+
     def forward(
         self,
         *,
@@ -147,7 +162,9 @@ class CoOpContextLearner(BaseUnimodalLearner):
         # May be precomputed, like in the case of cocoop
         if context_vectors is None:
             # (num_context, context_dim) -> (batch, num_context, context_dim)
-            context_vectors = self.context_vectors[index].expand(
+            context_vectors = self.get_textual_context(
+                image_features=image_features, index=index
+            ).expand(
                 input_embeddings.size(0),
                 -1,
                 -1,

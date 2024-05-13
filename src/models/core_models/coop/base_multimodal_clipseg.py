@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
 
 class BaseMultimodalCLIPSeg(BaseCLIPSeg):
-    context_learner: MapleContextLearner | BaseSharedLearner  # type:ignore
+    context_learner: MapleContextLearner | BaseSharedLearner
 
     def embeddings_forward(
         self,
@@ -138,9 +138,8 @@ class BaseMultimodalCLIPSeg(BaseCLIPSeg):
             hidden_states = layer_outputs[0]
 
             if idx < self.context_learner.prompt_depth:
-                # Overwrite the prompts skipping the BOS Token till the prompt depth
-                hidden_states = self.context_learner(
-                    input_embeddings=hidden_states, index=idx
+                self.context_learner.mutate_text_hidden_states(
+                    hidden_states=hidden_states, index=idx
                 )
 
             if output_attentions:

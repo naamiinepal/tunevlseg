@@ -22,7 +22,7 @@ def conv_layer(
     return nn.Sequential(
         nn.Conv2d(in_dim, out_dim, kernel_size, stride, padding, bias=False),
         nn.BatchNorm2d(out_dim),
-        nn.ReLU(True),
+        nn.ReLU(),
     )
 
 
@@ -30,7 +30,7 @@ def linear_layer(in_dim: int, out_dim: int, bias: bool = False):
     return nn.Sequential(
         nn.Linear(in_dim, out_dim, bias),
         nn.BatchNorm1d(out_dim),
-        nn.ReLU(True),
+        nn.ReLU(),
     )
 
 
@@ -45,11 +45,7 @@ class CoordConv(nn.Module):
     ) -> None:
         super().__init__()
         self.conv1 = conv_layer(
-            in_channels + 2,
-            out_channels,
-            kernel_size,
-            padding,
-            stride,
+            in_channels + 2, out_channels, kernel_size, padding, stride
         )
 
     def add_coord(self, input_tensor: torch.Tensor):
@@ -306,7 +302,7 @@ class TransformerDecoderLayer(nn.Module):
         # FFN
         self.ffn = nn.Sequential(
             nn.Linear(d_model, dim_feedforward),
-            nn.ReLU(True),
+            nn.ReLU(),
             nn.Dropout(dropout),
             nn.LayerNorm(dim_feedforward),
             nn.Linear(dim_feedforward, d_model),
@@ -342,7 +338,7 @@ class TransformerDecoderLayer(nn.Module):
         q = k = self.with_pos_embed(vis2, vis_pos)
         vis2 = self.self_attn(q, k, value=vis2)[0]
         vis2 = self.self_attn_norm(vis2)
-        vis += self.dropout1(vis2)
+        vis = vis + self.dropout1(vis2)
 
         # Cross-Attention
         vis2 = self.norm2(vis)
@@ -353,7 +349,7 @@ class TransformerDecoderLayer(nn.Module):
             key_padding_mask=pad_mask,
         )[0]
         vis2 = self.cross_attn_norm(vis2)
-        vis += self.dropout2(vis2)
+        vis = vis + self.dropout2(vis2)
         # FFN
         vis2 = self.norm3(vis)
         vis2 = self.ffn(vis2)
@@ -381,7 +377,7 @@ class FPN(nn.Module):
 
         # fusion 1: v5 & seq -> f_5: b, 1024, 13, 13
         self.f1_v_proj = conv_layer(in_channels[2], out_channels[2], 1, 0)
-        self.norm_layer = nn.Sequential(nn.BatchNorm2d(out_channels[2]), nn.ReLU(True))
+        self.norm_layer = nn.Sequential(nn.BatchNorm2d(out_channels[2]), nn.ReLU())
 
         # fusion 2: v4 & fm -> f_4: b, 512, 26, 26
         self.f2_v_proj = conv_layer(in_channels[1], out_channels[1], 3, 1)

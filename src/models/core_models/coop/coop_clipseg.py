@@ -158,10 +158,10 @@ class COOPCLIPSeg(BaseCLIPSeg):
 
             if idx < self.context_learner.prompt_depth:
                 # Overwrite the prompts skipping the BOS Token till the prompt depth
-                hidden_states = self.context_learner(
-                    input_embeddings=hidden_states,
-                    image_features=image_features,
+                self.context_learner.mutate_text_hidden_states(
+                    hidden_states=hidden_states,
                     index=idx,
+                    image_features=image_features,
                 )
 
             if output_attentions:

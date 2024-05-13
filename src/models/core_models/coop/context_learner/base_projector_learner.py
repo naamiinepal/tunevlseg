@@ -18,6 +18,7 @@ class BaseProjectorLearner(CoOpContextLearner):
         intermediate_dim: int | Iterable[int] | None = None,
         use_proj_norm: bool = False,
         use_lora_proj: bool = False,
+        use_final_bias: bool = True,
         **kwargs,
     ) -> None:
         if use_lora_proj and not isinstance(intermediate_dim, int):
@@ -26,10 +27,11 @@ class BaseProjectorLearner(CoOpContextLearner):
         super().__init__(prompt_depth=prompt_depth, **kwargs)
 
         projection_init_kwargs = {
-            "in_dim": proj_in_dim if proj_in_dim is None else self.context_dim,
-            "out_dim": proj_out_dim if proj_out_dim is None else self.context_dim,
+            "in_dim": proj_in_dim if proj_in_dim is not None else self.context_dim,
+            "out_dim": proj_out_dim if proj_out_dim is not None else self.context_dim,
             "intermediate_dim": intermediate_dim,
             "use_final_norm": use_proj_norm,
+            "use_final_bias": use_final_bias,
         }
 
         projection_layer_getter = (

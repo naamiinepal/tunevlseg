@@ -12,7 +12,7 @@ class SharedAttnLearner(BaseSharedLearner):
         *,
         textual_dim: int,
         visual_dim: int,
-        unified_projector: type[nn.TransformerEncoderLayer] | None = None,
+        unified_projector: type[nn.TransformerEncoderLayer],
         prompt_depth: int = BaseSharedLearner.MIN_PROMPT_DEPTH,
         use_unified_projection: bool = True,
         **kwargs,
@@ -23,15 +23,14 @@ class SharedAttnLearner(BaseSharedLearner):
                 "unified projection layer from the config."
             )
 
-        kwargs["context_initializer"] = None
-        kwargs["tokenizer"] = None
-        kwargs["embedding_layer"] = None
+        context_dim = textual_dim + visual_dim
+        kwargs["context_dim"] = context_dim
 
         super().__init__(prompt_depth=prompt_depth, **kwargs)
 
-        transformer_layer = unified_projector(d_model=textual_dim + visual_dim)  # type:ignore
+        transformer_layer = unified_projector(d_model=context_dim)  # type:ignore
 
-        self.common_projection_layers = nn.ModuleList(
+        self.projection_layers = nn.ModuleList(
             (transformer_layer,) * prompt_depth
             if use_unified_projection
             else (copy.deepcopy(transformer_layer) for _ in range(prompt_depth))
@@ -40,6 +39,9 @@ class SharedAttnLearner(BaseSharedLearner):
         # Make two caches to keep the memory usage minimal
         self._computed_textual_context_cache: dict[int, torch.Tensor] = {}
         self._computed_visual_context_cache: dict[int, torch.Tensor] = {}
+
+        self.textual_dim = textual_dim
+        self.visual_dim = visual_dim
 
     def _get_combined_transformed_context(
         self,
@@ -71,7 +73,7 @@ class SharedAttnLearner(BaseSharedLearner):
 
         transformer_shared_prompt: torch.Tensor = self.projection_layers[index](
             in_context
-        ).unsqueeze(0)
+        ).squeeze(0)
 
         if is_curr_branch_textual:
             write_cache_dict = self._computed_visual_context_cache
@@ -89,7 +91,9 @@ class SharedAttnLearner(BaseSharedLearner):
 
         return return_val
 
-    def get_transformed_textual_context(self, *args, **kwargs) -> torch.Tensor:
+    def get_textual_context(
+        self, image_features: torch.Tensor | None = None, *args, **kwargs
+    ) -> torch.Tensor:
         return self._get_combined_transformed_context(
             *args, is_curr_branch_textual=True, **kwargs
         )

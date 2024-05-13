@@ -30,7 +30,7 @@ class VPTCLIPSeg(BaseCLIPSeg):
                 self.model.config.text_config.num_hidden_layers,
                 self.model.config.vision_config.num_hidden_layers,
             ),
-            context_dim=self.model.config.text_config.hidden_size,
+            context_dim=self.model.config.vision_config.hidden_size,
         )
 
     def vision_transformer_model_forward(
@@ -345,7 +345,7 @@ class VPTCLIPSeg(BaseCLIPSeg):
 
         # step 1: compute conditional embeddings, either from text, images or an own provided embedding
         if conditional_embeddings is None:
-            conditional_embeddings = self.get_conditional_embeddings(
+            conditional_embeddings = _self.get_conditional_embeddings(
                 batch_size=pixel_values.shape[0],
                 input_ids=input_ids,
                 attention_mask=attention_mask,

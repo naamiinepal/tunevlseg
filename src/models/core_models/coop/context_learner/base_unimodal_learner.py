@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     EmbeddingLayerType = Callable[[torch.Tensor], torch.Tensor]
 
 
-class BaseUnimodalLearner(ABC, nn.Module):
+class BaseUnimodalLearner(nn.Module, ABC):
     MIN_PROMPT_DEPTH: Final = 1
 
     def __init__(

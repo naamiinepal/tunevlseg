@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 from torch import nn
+from torch.nn import functional as F
 
 from src.models.components.cris_model import CRIS
 
@@ -11,6 +12,8 @@ from .context_learner import CoCoOpContextLearner, CoOpContextLearner
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
+
+    from torch.nn.common_types import _size_2_t
 
     from src.models.components.cris_model import CLIPImageOutputType
 
@@ -21,12 +24,20 @@ class COOPCRIS(CRIS):
         model_cfg: Mapping[str, Any],
         context_learner: type[CoOpContextLearner | CoCoOpContextLearner],
         freeze_all: bool = True,
+        no_freeze_last_layer: bool = False,
+        use_new_last_layer: bool = False,
+        new_last_layer_kernel_size: _size_2_t = 5,
+        residual_ratio: float = 0.5,
     ) -> None:
         super().__init__(**model_cfg)
 
-        if freeze_all:
-            self.eval()
-            self.requires_grad_(False)
+        self.assign_model_learnability(
+            freeze_all,
+            no_freeze_last_layer,
+            use_new_last_layer,
+            new_last_layer_kernel_size,
+            residual_ratio,
+        )
 
         self.context_learner = context_learner(
             max_network_depth=self.backbone.transformer.layers,
@@ -40,13 +51,51 @@ class COOPCRIS(CRIS):
         # Since image features is not needed for CoOp, no need for an extra computation
         self.image_features_pooler_or_identity = (
             self._pool_4D_tensor
-            if isinstance(context_learner, CoCoOpContextLearner)
+            if isinstance(self.context_learner, CoCoOpContextLearner)
             else nn.Identity()
         )
 
+    def assign_model_learnability(
+        self,
+        freeze_all: bool,
+        no_freeze_last_layer: bool,
+        use_new_last_layer: bool,
+        new_last_layer_kernel_size: _size_2_t,
+        residual_ratio: float,
+    ):
+        if freeze_all:
+            self.eval()
+            self.requires_grad_(False)
+
+        self.additive_decoder_layer = None
+
+        if use_new_last_layer:
+            intermediate_dim = 64
+            self.additive_decoder_layer = nn.Sequential(
+                nn.Conv2d(self.proj.in_dim * 2, intermediate_dim, 1, bias=False),
+                nn.Upsample(
+                    size=self.img_size,
+                    mode="bilinear",
+                ),
+                nn.Conv2d(
+                    intermediate_dim,
+                    1,
+                    kernel_size=new_last_layer_kernel_size,
+                    padding="same",
+                    padding_mode="replicate",
+                ),
+            )
+            self.residual_ratio = nn.Parameter(torch.tensor(residual_ratio))
+        elif no_freeze_last_layer:
+            # Unfreeze text alignment layer
+            self.proj.txt.requires_grad_(True)
+
+            # Unfreeze visual transformation layer
+            self.proj.vis[-1].requires_grad_(True)
+
     @staticmethod
     def _pool_4D_tensor(x: torch.Tensor) -> torch.Tensor:
-        # Leave batch and channel dimension, pooler from other dims
+        # Leave batch and channel dimension, pool from other dims
         return x.mean((2, 3))
 
     def get_pad_mask(
@@ -86,8 +135,8 @@ class COOPCRIS(CRIS):
 
                 # Overwrite the prompts skipping the BOS Token till the prompt depth
                 # shape: (batch_size, seq_length, d_model)
-                x = self.context_learner(
-                    input_embeddings=x, image_features=image_features, index=idx
+                self.context_learner.mutate_text_hidden_states(
+                    hidden_states=x, image_features=image_features, index=idx
                 )
 
                 # shape: (seq_length, batch_size, d_model)
@@ -150,3 +199,44 @@ class COOPCRIS(CRIS):
 
         input_ids, state = self.encode_text(input_ids, image_features, *args, **kwargs)
         return vis, input_ids, state
+
+    def forward(
+        self,
+        text_input: Mapping[str, torch.Tensor],
+        image_input: torch.Tensor,
+    ):
+        """img: b, 3, h, w
+        word: b, words
+        word_mask: b, words
+        mask: b, 1, h, w.
+        """
+        input_ids = text_input["input_ids"]
+
+        attention_mask = text_input.get("attention_mask")
+
+        # padding mask used in decoder
+        pad_mask = self.get_pad_mask(input_ids, attention_mask)
+
+        vis, input_ids, state = self.get_unimodal_outputs(
+            image_input,
+            input_ids,
+            key_padding_mask=pad_mask,
+        )
+
+        # b, 512, 26, 26 (C4)
+        fq = self.neck(vis, state)
+        b, c, h, w = fq.size()
+        fq = self.decoder(fq, input_ids, pad_mask)
+        fq = fq.view(b, c, h, w)
+
+        # b, 1, 104, 104
+        pred = self.proj(fq, state)
+
+        logits = F.interpolate(pred, self.img_size, mode="bicubic", align_corners=True)
+
+        if self.additive_decoder_layer is None:
+            return logits
+
+        return (
+            1 - self.residual_ratio
+        ) * logits + self.residual_ratio * self.additive_decoder_layer(fq)

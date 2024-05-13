@@ -9,13 +9,18 @@ net:
   context_learner:
     _target_: src.models.core_models.coop.context_learner.CoOpContextLearner
     _partial_: true
+    prompt_depth: 1
     num_context: 4
-    context_initializer: null
+    context_initializer: "a photo of a"
     vector_std: 0.02
     tokenizer:
       _target_: transformers.AutoTokenizer.from_pretrained
       pretrained_model_name_or_path: ${tokenizer_pretrained_path}
   freeze_all: true
+  no_freeze_last_layer: false
+  use_new_last_layer: true
+  new_last_layer_kernel_size: 5
+  residual_ratio: 0.5
 
 loss_fn:
   _target_: monai.losses.DiceCELoss

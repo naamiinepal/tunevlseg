@@ -13,30 +13,41 @@ from transformers.models.clipseg.modeling_clipseg import (
 
 from src.models.components.hf_clipseg_wrapper import HFCLIPSegWrapper
 
-from .context_learner import BaseUnimodalLearner, BaseVisualLearner
+from .context_learner import BaseVisualLearner
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
+    from torch.nn.common_types import _size_2_t
+
 
 class BaseCLIPSeg(HFCLIPSegWrapper, ABC):
-    context_learner: BaseUnimodalLearner
-
     def __init__(
         self,
         model_cfg: Mapping[str, Any],
         freeze_all: bool = True,
         no_freeze_last_layer: bool = False,
         use_new_last_layer: bool = False,
+        new_last_layer_kernel_size: _size_2_t = 5,
+        residual_ratio: float = 0.5,
     ) -> None:
         super().__init__(**model_cfg)
 
         self.assign_model_learnability(
-            freeze_all, no_freeze_last_layer, use_new_last_layer
+            freeze_all,
+            no_freeze_last_layer,
+            use_new_last_layer,
+            new_last_layer_kernel_size,
+            residual_ratio,
         )
 
     def assign_model_learnability(
-        self, freeze_all: bool, no_freeze_last_layer: bool, use_new_last_layer: bool
+        self,
+        freeze_all: bool,
+        no_freeze_last_layer: bool,
+        use_new_last_layer: bool,
+        new_last_layer_kernel_size: _size_2_t,
+        residual_ratio: float,
     ):
         if freeze_all:
             self.eval()
@@ -51,11 +62,12 @@ class BaseCLIPSeg(HFCLIPSegWrapper, ABC):
                 nn.Conv2d(
                     self.model.config.reduce_dim,
                     1,
-                    kernel_size=5,
+                    kernel_size=new_last_layer_kernel_size,
                     padding="same",
                     padding_mode="replicate",
                 ),
             )
+            self.residual_ratio = nn.Parameter(torch.tensor(residual_ratio))
         elif no_freeze_last_layer:
             self.additive_decoder_layer = None
 
@@ -138,7 +150,9 @@ class BaseCLIPSeg(HFCLIPSegWrapper, ABC):
         logits = _self.transposed_convolution(output)
 
         if self.additive_decoder_layer is not None:
-            logits += self.additive_decoder_layer(output)
+            logits = (
+                1 - self.residual_ratio
+            ) * logits + self.residual_ratio * self.additive_decoder_layer(output)
 
         logits = logits.squeeze()
 

@@ -25,7 +25,13 @@ class SharedSeparateLearner(BaseSharedLearner):
         if use_lora_proj and not isinstance(intermediate_dim, int):
             raise ValueError("Lora projection is only available for a single layer.")
 
-        super().__init__(prompt_depth=prompt_depth, **kwargs)
+        kwargs["context_dim"] = shared_dim
+
+        super().__init__(
+            prompt_depth=prompt_depth,
+            **kwargs,
+        )
+
         projection_layer_getter = (
             BaseProjectorLearner.get_lora_projection
             if use_lora_proj
@@ -68,8 +74,11 @@ class SharedSeparateLearner(BaseSharedLearner):
             else (copy.deepcopy(single_layer) for _ in range(prompt_depth))
         )
 
-    def get_transformed_textual_context(
-        self, in_context: torch.Tensor | None = None, index: int = 0
+    def get_textual_context(
+        self,
+        in_context: torch.Tensor | None = None,
+        image_features: torch.Tensor | None = None,
+        index: int = 0,
     ) -> torch.Tensor:
         if in_context is None:
             in_context = self.context_vectors[index]

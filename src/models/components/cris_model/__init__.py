@@ -114,9 +114,7 @@ class CRIS(nn.Module):
         pad_mask = self.get_pad_mask(input_ids, attention_mask)
 
         vis, input_ids, state = self.get_unimodal_outputs(
-            image_input,
-            input_ids,
-            key_padding_mask=pad_mask,
+            image_input, input_ids, key_padding_mask=pad_mask
         )
 
         # b, 512, 26, 26 (C4)
