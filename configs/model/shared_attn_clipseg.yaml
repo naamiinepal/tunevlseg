@@ -19,6 +19,7 @@ net:
       nhead: 16
       dim_feedforward: 1536
       dropout: 0.25
+      norm_first: true
   freeze_all: true
   no_freeze_last_layer: false
   use_new_last_layer: true

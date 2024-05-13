@@ -16,7 +16,7 @@ net:
     use_proj_norm: true
     use_lora_proj: false
     num_context: 4
-    vector_std: 1.02
+    vector_std: 0.02
   freeze_all: true
   no_freeze_last_layer: false
   use_new_last_layer: true
