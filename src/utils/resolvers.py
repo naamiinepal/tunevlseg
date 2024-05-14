@@ -64,11 +64,13 @@ def register_new_resolvers(func: Callable[P, T]) -> Callable[P, T]:
     @functools.wraps(func)
     def inner_func(*args: P.args, **kwargs: P.kwargs) -> T:
         # Register a resolver to evaluate in the yaml file
-        OmegaConf.register_new_resolver("literal_eval", eval)
+        OmegaConf.register_new_resolver("literal_eval", eval, replace=True)
 
         # Register a resolver to import a function in the yaml file and evaluate it
         # It can be done only for those dtypes which are serializable
-        OmegaConf.register_new_resolver("import_eval", import_resolver)
+        OmegaConf.register_new_resolver(
+            "import_eval", import_resolver, replace=True, use_cache=True
+        )
 
         return func(*args, **kwargs)
 
