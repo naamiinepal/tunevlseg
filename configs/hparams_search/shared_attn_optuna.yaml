@@ -51,7 +51,7 @@ hydra:
     # define hyperparameter search space
     params:
       model.optimizer.lr: tag(log, interval(1e-5, 5e-3))
-      model.weight_decay: tag(log, interval(0, 0.01))
+      model.weight_decay: tag(log, interval(1e-5, 0.01))
       model.net.context_learner.prompt_depth: range(1, 12)
       model.net.context_learner.unified_projector.nhead: range(8, 21, 4)
       model.net.context_learner.unified_projector.dropout: interval(0.1, 0.55)
