@@ -33,14 +33,14 @@ hydra:
     direction: minimize
 
     # total number of runs that will be executed
-    n_trials: 40
+    n_trials: 20
 
     # choose Optuna hyperparameter sampler
     # you can choose bayesian sampler (tpe), random search (without optimization), grid sampler, and others
     # docs: https://optuna.readthedocs.io/en/stable/reference/samplers.html
     sampler:
       _target_: optuna.samplers.TPESampler
-      seed: 1234
+      seed: 12345
       multivariate: true
       warn_independent_sampling: true
       consider_prior: true
@@ -52,7 +52,7 @@ hydra:
     params:
       model.optimizer.lr: tag(log, interval(1e-5, 5e-3))
       model.weight_decay: tag(log, interval(1e-5, 0.01))
-      model.net.context_learner.prompt_depth: range(1, 12)
+      model.net.context_learner.prompt_depth: range(1, 11)
       model.net.context_learner.unified_projector.nhead: range(8, 21, 4)
       model.net.context_learner.unified_projector.dropout: interval(0.1, 0.55)
       model.net.context_learner.unified_projector.dim_feedforward: choice(1280, 1536)
