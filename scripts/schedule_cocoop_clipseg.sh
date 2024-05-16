@@ -15,14 +15,14 @@ precision=16-mixed
 # bkai_polyp clinicdb_polyp kvasir_polyp busi chexlocalize dfu isic
 for ds_name in bkai_polyp clinicdb_polyp kvasir_polyp busi chexlocalize dfu isic; do
 	# Enable auto-tuner for cudnn may increase performance in the cost of memory
-	.venv/bin/python src/train.py -m hparams_search=cocoop_optuna experiment=cocoop/clipseg model=cocoop/clipseg \
+	.venv/bin/python src/train.py -m hparams_search=cocoop_optuna experiment=coop/clipseg model=cocoop/clipseg \
 		prompt_index=1 trainer.devices=$devices trainer.log_every_n_steps=3 \
 		ds_name=$ds_name data.batch_size=$batch_size data.num_workers=8 \
 		+trainer.benchmark=true trainer.precision=$precision
 done
 
 ds_name=camus
-.venv/bin/python src/train.py -m hparams_search=cocoop_optuna experiment=cocoop/clipseg model=cocoop/clipseg data=image_text_mask_camus \
+.venv/bin/python src/train.py -m hparams_search=cocoop_optuna experiment=coop/clipseg model=cocoop/clipseg data=image_text_mask_camus \
 	prompt_index=1 trainer.devices=$devices trainer.log_every_n_steps=3 \
 	ds_name=$ds_name data.batch_size=$batch_size data.num_workers=8 \
 	+trainer.benchmark=true trainer.precision=$precision

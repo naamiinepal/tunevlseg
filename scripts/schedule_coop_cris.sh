@@ -8,7 +8,7 @@ export TOKENIZERS_PARALLELISM=false
 # Use when you're low in memory
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
-devices='[1]'
+devices='[0]'
 batch_size=32
 precision=16-mixed
 
