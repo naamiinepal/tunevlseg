@@ -3,9 +3,8 @@ from collections import OrderedDict
 
 import torch
 import torch.nn.functional as F
-from torch import nn
-
 from mmseg.models.builder import BACKBONES
+from torch import nn
 
 from .timm_utils import drop_path, trunc_normal_
 

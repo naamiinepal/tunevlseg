@@ -76,7 +76,9 @@ def print_config_tree(
 
     # save config tree to file
     if save_to_file:
-        with Path(cfg.paths.output_dir, "config_tree.log").open("w") as file:
+        with Path(cfg.paths.output_dir, "config_tree.log").open(
+            "w", encoding="locale"
+        ) as file:
             rich.print(tree, file=file)
 
 
@@ -103,5 +105,7 @@ def enforce_tags(cfg: DictConfig, save_to_file: bool = False) -> None:
         log.info(f"Tags: {cfg.tags}")
 
     if save_to_file:
-        with Path(cfg.paths.output_dir, "tags.log").open("w") as file:
+        with Path(cfg.paths.output_dir, "tags.log").open(
+            "w", encoding="locale"
+        ) as file:
             rich.print(cfg.tags, file=file)

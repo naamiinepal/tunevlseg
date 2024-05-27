@@ -12,9 +12,7 @@ import numpy as np
 from .basedataset import BaseImageTextMaskDataset
 
 if TYPE_CHECKING:
-    from .basedataset import (
-        StrOrPath,
-    )
+    from .basedataset import StrOrPath
 
     PromptType = str | Sequence[str]
     PromptMappingType = Mapping[str, PromptType]

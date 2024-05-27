@@ -2,15 +2,14 @@ from collections.abc import Iterable, Mapping, Sequence
 from typing import TYPE_CHECKING, Literal
 
 import torch
-from torch import nn
-from torch.nn import functional as F
-
 from mmengine import ConfigDict
 from mmseg.models import builder
 from mmseg.models.segmentors.base import BaseSegmentor
 from mmseg.models.utils import resize
 from mmseg.utils import add_prefix
 from mmseg.utils.typing_utils import SampleList
+from torch import nn
+from torch.nn import functional as F
 
 from .untils import tokenize
 
