@@ -22,7 +22,11 @@ class SharedSeparateLearner(BaseSharedLearner):
         use_lora_proj: bool = False,
         **kwargs,
     ) -> None:
-        if use_lora_proj and not isinstance(intermediate_dim, int):
+        if (
+            use_lora_proj
+            and intermediate_dim is not None
+            and not isinstance(intermediate_dim, int)
+        ):
             raise ValueError("Lora projection is only available for a single layer.")
 
         kwargs["context_dim"] = shared_dim
@@ -34,7 +38,7 @@ class SharedSeparateLearner(BaseSharedLearner):
 
         projection_layer_getter = (
             BaseProjectorLearner.get_lora_projection
-            if use_lora_proj
+            if use_lora_proj and intermediate_dim is not None
             else BaseProjectorLearner.get_mlp_projection
         )
 

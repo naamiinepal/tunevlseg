@@ -54,6 +54,5 @@ hydra:
       model.weight_decay: tag(log, interval(1e-5, 0.01))
       model.net.context_learner.prompt_depth: range(1, 11)
       model.net.context_learner.shared_dim: choice(32, 64)
-      model.net.context_learner.use_lora_proj: choice(true, false)
       # model.net.no_freeze_last_layer: choice(true, false)
       # model.net.use_new_last_layer: choice(true, false)

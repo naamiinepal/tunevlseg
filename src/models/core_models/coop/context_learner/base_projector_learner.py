@@ -21,7 +21,11 @@ class BaseProjectorLearner(CoOpContextLearner):
         use_final_bias: bool = True,
         **kwargs,
     ) -> None:
-        if use_lora_proj and not isinstance(intermediate_dim, int):
+        if (
+            use_lora_proj
+            and intermediate_dim is not None
+            and not isinstance(intermediate_dim, int)
+        ):
             raise ValueError("Lora projection is only available for a single layer.")
 
         super().__init__(prompt_depth=prompt_depth, **kwargs)
@@ -35,7 +39,9 @@ class BaseProjectorLearner(CoOpContextLearner):
         }
 
         projection_layer_getter = (
-            self.get_lora_projection if use_lora_proj else self.get_mlp_projection
+            self.get_lora_projection
+            if use_lora_proj and intermediate_dim is not None
+            else self.get_mlp_projection
         )
 
         # Use the same internal object resulting in only one layer, for unified projection

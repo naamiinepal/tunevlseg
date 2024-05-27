@@ -40,7 +40,7 @@ hydra:
     # docs: https://optuna.readthedocs.io/en/stable/reference/samplers.html
     sampler:
       _target_: optuna.samplers.TPESampler
-      seed: 12345
+      seed: 1234
       multivariate: true
       warn_independent_sampling: true
       consider_prior: true
@@ -53,9 +53,9 @@ hydra:
       model.optimizer.lr: tag(log, interval(1e-5, 5e-3))
       model.weight_decay: tag(log, interval(1e-5, 0.01))
       model.net.context_learner.prompt_depth: range(1, 11)
-      model.net.context_learner.unified_projector.nhead: range(8, 21, 4)
+      model.net.context_learner.unified_projector.nhead: choice(16, 20, 32)
       model.net.context_learner.unified_projector.dropout: interval(0.1, 0.55)
-      model.net.context_learner.unified_projector.dim_feedforward: choice(1280, 1536)
+      model.net.context_learner.unified_projector.dim_feedforward: choice(1280, 1420)
       model.net.context_learner.unified_projector.norm_first: choice(true, false)
       # model.net.no_freeze_last_layer: choice(true, false)
       # model.net.use_new_last_layer: choice(true, false)
