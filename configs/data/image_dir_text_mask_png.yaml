@@ -29,8 +29,8 @@ val_ds:
 
 test_ds:
   _target_: src.data.core_datasets.ImageDirTextMaskDataset
-  image_dir: ${dataset_root}/images/testing
-  mask_dir: ${dataset_root}/annotations/testing
+  image_dir: ${dataset_root}/images/validation
+  mask_dir: ${dataset_root}/annotations/validation
   image_suffix: .png
   mask_suffix: .png
   tokenizer_pretrained_path: ${tokenizer_pretrained_path}
