@@ -9,6 +9,8 @@ import numpy as np
 from .basedataset import BaseImageTextMaskDataset
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from .basedataset import StrOrPath
 
 
@@ -41,43 +43,36 @@ class ImageDirTextMaskDataset(BaseImageTextMaskDataset):
 
         super().__init__(tasks=tasks, **kwargs)
 
-    def get_tasks(self) -> list[Path]:
-        class_names = {
-            str(p.relative_to(self.mask_dir))
-            for p in self.mask_dir.iterdir()
-            if p.is_dir()
-        }
-
-        num_classes = len(class_names)
+    def get_tasks(self) -> list[Mapping[str, str]]:
+        # Throw error in the early stage if no directories exist
+        num_classes = len(tuple(p for p in self.mask_dir.iterdir() if p.is_dir()))
 
         if not num_classes:
             raise ValueError(f"No directories found in {self.mask_dir}")
 
-        image_files = tuple(self.image_dir.glob(f"*{self.image_suffix}"))
+        tasks: list[Mapping[str, str]] = []
 
-        if not image_files:
-            raise ValueError(f"No files found in {self.image_dir}")
+        for mask_path in self.mask_dir.glob(f"*/*{self.mask_suffix}"):
+            mask_name = mask_path.name
+            class_name = mask_path.parent.name
 
-        tasks: list[Path] = []
-
-        # Cache for faster access
-        mask_suffix = self.mask_suffix
-        image_dir = self.image_dir
-        for image_path in image_files:
-            image_name = image_path.relative_to(image_dir).with_suffix(mask_suffix)
-            tasks.extend(class_name / image_name for class_name in class_names)
+            tasks.append({"class_name": class_name, "mask_name": mask_name})
 
         return tasks
 
     def __getitem__(self, index: int) -> dict[str, Any]:
-        mask_name = Path(self.tasks[index])
+        task = self.tasks[index]
+        class_name = str(task["class_name"])
 
-        curr_prompt = str(mask_name.parents[-1])
-
-        if self.insert_stop_at_last and curr_prompt[-1] != ".":
-            curr_prompt += "."
+        curr_prompt = (
+            f"{class_name}."
+            if self.insert_stop_at_last and class_name[-1] != "."
+            else class_name
+        )
 
         text_inputs = self.tokenizer(curr_prompt)
+
+        mask_name = Path(task["mask_name"])
 
         image_path = self.image_dir / mask_name.with_suffix(self.image_suffix)
 
@@ -87,6 +82,8 @@ class ImageDirTextMaskDataset(BaseImageTextMaskDataset):
             cvtColor_code=cv2.COLOR_BGR2RGB,
         )
 
+        # Update mask_name to save in this way later
+        mask_name = class_name / mask_name
         mask_path = self.mask_dir / mask_name
 
         mask = (
@@ -110,7 +107,7 @@ class ImageDirTextMaskDataset(BaseImageTextMaskDataset):
             "image": image,
             "mask": mask,
             "mask_shape": np.array(mask.shape[:-1]),  # Needed to collate properly
-            "mask_name": mask_name,
+            "mask_name": str(mask_name),
             "prompt": curr_prompt,
             **text_inputs,
         }
