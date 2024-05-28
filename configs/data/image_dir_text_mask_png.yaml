@@ -1,0 +1,47 @@
+_target_: src.data.image_text_mask_datamodule.ImageTextDatamodule
+train_ds:
+  _target_: src.data.core_datasets.ImageDirTextMaskDataset
+  image_dir: ${dataset_root}/images/training
+  mask_dir: ${dataset_root}/annotations/training
+  image_suffix: .png
+  mask_suffix: .png
+  tokenizer_pretrained_path: ${tokenizer_pretrained_path}
+  override_prompt: ${override_prompt}
+  transforms: ${train_transforms}
+  model_max_length: ${max_length}
+  return_tensors: ${return_tensors}
+  collate_fn: ${collate_fn}
+  insert_stop_at_last: ${insert_stop_at_last}
+
+val_ds:
+  _target_: src.data.core_datasets.ImageDirTextMaskDataset
+  image_dir: ${dataset_root}/images/validation
+  mask_dir: ${dataset_root}/annotations/validation
+  image_suffix: .png
+  mask_suffix: .png
+  tokenizer_pretrained_path: ${tokenizer_pretrained_path}
+  override_prompt: ${override_prompt}
+  transforms: ${train_transforms}
+  model_max_length: ${max_length}
+  return_tensors: ${return_tensors}
+  collate_fn: ${collate_fn}
+  insert_stop_at_last: ${insert_stop_at_last}
+
+test_ds:
+  _target_: src.data.core_datasets.ImageDirTextMaskDataset
+  image_dir: ${dataset_root}/images/testing
+  mask_dir: ${dataset_root}/annotations/testing
+  image_suffix: .png
+  mask_suffix: .png
+  tokenizer_pretrained_path: ${tokenizer_pretrained_path}
+  override_prompt: ${override_prompt}
+  transforms: ${train_transforms}
+  model_max_length: ${max_length}
+  return_tensors: ${return_tensors}
+  collate_fn: ${collate_fn}
+  insert_stop_at_last: ${insert_stop_at_last}
+
+batch_size: 64
+num_workers: 4
+drop_last: false
+pin_memory: true
