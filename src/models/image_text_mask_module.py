@@ -274,10 +274,12 @@ class ImageTextMaskModule(LightningModule):
             self.net = torch.compile(self.net)
 
         threshold: float = self.hparams.threshold  # type:ignore
-        dice_kwargs = {"threshold": threshold, "average": "samples"}
+        common_kwargs = {"threshold": threshold, "zero_division": 1}
+
+        dice_kwargs = {**common_kwargs, "average": "samples"}
 
         task: TaskType = self.hparams.task  # type:ignore
-        iou_kwargs = {"task": task, "threshold": threshold}
+        iou_kwargs = {**common_kwargs, "task": task}
 
         if stage == "fit":
             self.store_and_register_metrics("train_dice", Dice(**dice_kwargs))
