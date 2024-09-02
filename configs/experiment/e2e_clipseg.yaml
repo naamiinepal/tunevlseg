@@ -5,7 +5,7 @@
 
 defaults:
   - override /data: image_text_mask
-  - override /model: coop/cris.yaml
+  - override /model: e2e_clipseg
   - override /callbacks: default
   - override /trainer: default
   - override /logger: wandb
@@ -14,25 +14,24 @@ defaults:
 # all parameters below will be merged with parameters from default configurations set above
 # this allows you to overwrite only specified parameters
 
-tags: ["coop", "VLSM", "CRIS"]
+tags: ["E2E", "VLSM", "CLIPSeg"]
 
 seed: 12345
 
 trainer:
   min_epochs: 10
-  max_epochs: 20
+  max_epochs: 40
   gradient_clip_val: null
   accelerator: auto
   devices: auto
-  precision: 32
+  precision: 16-mixed
   log_every_n_steps: 6
 
 model:
   net:
-    model_cfg:
-      dropout: 0
-    use_new_last_layer: true
-  weight_decay: 0.0
+    freeze_encoder: false
+    freeze_decoder: false
+  weight_decay: 0.001
   optimizer:
     lr: 2.0e-4
   compile: false # Torch compile works only when CUDA Compat >= 7.0
@@ -47,7 +46,7 @@ data:
 
 logger:
   wandb:
-    project: VLSM Prompt Learner
+    project: VLSM E2E Learner
     name: ${exp_name}
     tags: ${tags}
 
@@ -58,13 +57,14 @@ logger:
 ds_name: ??
 dataset_root: ${data_root}/${ds_name}
 
-tokenizer_pretrained_path: CIDAS/clipseg-rd64
+model_pretrained_path: CIDAS/clipseg-rd64
+tokenizer_pretrained_path: ${model_pretrained_path}
 
-exp_name: "ds_${ds_name}_model_CRIS_img_${img_size}_b${data.batch_size}_lr${model.optimizer.lr}_p${trainer.precision}_w${model.weight_decay}"
+exp_name: "ds_${ds_name}_model_${model_pretrained_path}_img_${img_size}_b${data.batch_size}_lr${model.optimizer.lr}_p${trainer.precision}_w${model.weight_decay}"
 
-img_size: 416
-img_mean: [0.48145466, 0.4578275, 0.40821073]
-img_std: [0.26862954, 0.26130258, 0.27577711]
+img_size: 352
+img_mean: [0.485, 0.456, 0.406]
+img_std: [0.229, 0.224, 0.225]
 
 prompt_index: ??
 override_prompt: null

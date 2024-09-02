@@ -20,7 +20,7 @@ seed: 12345
 
 trainer:
   min_epochs: 10
-  max_epochs: 100
+  max_epochs: 20
   gradient_clip_val: null
   accelerator: auto
   devices: auto

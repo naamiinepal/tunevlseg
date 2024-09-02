@@ -40,7 +40,7 @@ hydra:
     # docs: https://optuna.readthedocs.io/en/stable/reference/samplers.html
     sampler:
       _target_: optuna.samplers.TPESampler
-      seed: 1234
+      seed: 123456
       multivariate: true
       warn_independent_sampling: true
       consider_prior: true

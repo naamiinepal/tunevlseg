@@ -5,7 +5,7 @@
 
 defaults:
   - override /data: image_text_mask
-  - override /model: coop/cris.yaml
+  - override /model: e2e_cris
   - override /callbacks: default
   - override /trainer: default
   - override /logger: wandb
@@ -14,27 +14,26 @@ defaults:
 # all parameters below will be merged with parameters from default configurations set above
 # this allows you to overwrite only specified parameters
 
-tags: ["coop", "VLSM", "CRIS"]
+tags: ["E2E", "VLSM", "CRIS"]
 
 seed: 12345
 
 trainer:
   min_epochs: 10
-  max_epochs: 20
+  max_epochs: 40
   gradient_clip_val: null
   accelerator: auto
   devices: auto
-  precision: 32
+  precision: 16-mixed
   log_every_n_steps: 6
 
 model:
   net:
-    model_cfg:
-      dropout: 0
-    use_new_last_layer: true
-  weight_decay: 0.0
+    dropout: 0.2
+    freeze_encoder: false
+  weight_decay: 0.001
   optimizer:
-    lr: 2.0e-4
+    lr: 5.0e-5
   compile: false # Torch compile works only when CUDA Compat >= 7.0
   loss_fn:
     lambda_dice: 1
@@ -47,7 +46,7 @@ data:
 
 logger:
   wandb:
-    project: VLSM Prompt Learner
+    project: VLSM E2E Learner
     name: ${exp_name}
     tags: ${tags}
 

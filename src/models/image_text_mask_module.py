@@ -130,7 +130,7 @@ class ImageTextMaskModule(LightningModule):
         # and the average across the epoch, to the progress bar and logger
         self.log(
             "train_loss",
-            loss,
+            torch.nan_to_num(loss, nan=float("inf")),
             on_step=True,
             on_epoch=True,
             prog_bar=True,
@@ -159,7 +159,11 @@ class ImageTextMaskModule(LightningModule):
         self.val_iou(preds, targets)
 
         self.log_dict(
-            {"val_dice": self.val_dice, "val_iou": self.val_iou, "val_loss": loss},
+            {
+                "val_dice": self.val_dice,
+                "val_iou": self.val_iou,
+                "val_loss": torch.nan_to_num(loss, nan=float("inf")),
+            },
             prog_bar=True,
             batch_size=len(preds),
         )
@@ -228,7 +232,11 @@ class ImageTextMaskModule(LightningModule):
         self.test_iou(preds, targets)
 
         self.log_dict(
-            {"test_dice": self.test_dice, "test_iou": self.test_iou, "test_loss": loss},
+            {
+                "test_dice": self.test_dice,
+                "test_iou": self.test_iou,
+                "test_loss": torch.nan_to_num(loss, nan=float("inf")),
+            },
             prog_bar=True,
             batch_size=len(preds),
         )

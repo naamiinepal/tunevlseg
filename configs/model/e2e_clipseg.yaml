@@ -1,0 +1,41 @@
+_target_: src.models.image_text_mask_module.ImageTextMaskModule
+
+net:
+  _target_: src.models.components.hf_clipseg_wrapper.HFCLIPSegWrapper
+  pretrained_model_name_or_path: ${model_pretrained_path}
+  freeze_encoder: false
+  freeze_decoder: false
+
+loss_fn:
+  _target_: monai.losses.DiceCELoss
+  sigmoid: true
+  lambda_dice: 1
+  lambda_ce: 0.2
+
+weight_decay: 0.001
+optimizer:
+  _target_: torch.optim.AdamW
+  _partial_: true
+  lr: 2.0e-4
+
+# lr_scheduler_config:
+#   interval: step
+#
+# scheduler:
+#   _target_: torch.optim.lr_scheduler.CosineAnnealingLR
+#   _partial_: true
+#   T_max: 2.0e6
+#   eta_min: 1.0e-6
+
+scheduler:
+  _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
+  _partial_: true
+  mode: min
+  factor: 0.2
+  patience: 5
+
+# compile model for faster training with pytorch 2.0
+compile: false
+
+task: binary
+threshold: 0.5

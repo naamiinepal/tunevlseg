@@ -94,6 +94,9 @@ class ImageDirTextMaskDataset(BaseImageTextMaskDataset):
             / 255
         )
 
+        # Need to calculate here, may be changed below
+        mask_shape = np.array(mask.shape)
+
         # Add the final channel layer to mask
         mask = mask[..., None]
 
@@ -106,7 +109,7 @@ class ImageDirTextMaskDataset(BaseImageTextMaskDataset):
         return {
             "image": image,
             "mask": mask,
-            "mask_shape": np.array(mask.shape[:-1]),  # Needed to collate properly
+            "mask_shape": mask_shape,  # Needed to collate properly
             "mask_name": str(mask_name),
             "prompt": curr_prompt,
             **text_inputs,

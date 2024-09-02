@@ -53,6 +53,8 @@ class BaseCLIPSeg(HFCLIPSegWrapper, ABC):
             self.eval()
             self.requires_grad_(False)
 
+        self.additive_decoder_layer = None
+
         if use_new_last_layer:
             self.additive_decoder_layer = nn.Sequential(
                 nn.Upsample(
@@ -69,8 +71,6 @@ class BaseCLIPSeg(HFCLIPSegWrapper, ABC):
             )
             self.residual_ratio = nn.Parameter(torch.tensor(residual_ratio))
         elif no_freeze_last_layer:
-            self.additive_decoder_layer = None
-
             trans_conv = self.model.decoder.transposed_convolution
             last_layer = (
                 trans_conv[-1]

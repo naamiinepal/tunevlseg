@@ -35,6 +35,8 @@ class CRIS(nn.Module):
         img_size: int = 416,
         freeze_encoder: bool = True,
         cris_pretrain: FILE_LIKE | None = None,
+        *args,
+        **kwargs,
     ) -> None:
         nn.Module.__init__(self)
 
@@ -60,6 +62,7 @@ class CRIS(nn.Module):
         self.proj = Projector(word_dim, vis_dim // 2, 3)
 
         if cris_pretrain is not None:
+            print("Loading CRIS pre-trained model from:", cris_pretrain)
             self.load_state_dict(
                 torch.load(cris_pretrain, map_location="cpu"),
                 strict=True,

@@ -40,11 +40,20 @@ class HFCLIPSegWrapper(nn.Module):
         *args,
         **kwargs,
     ) -> CLIPSegForImageSegmentation:
-        model = CLIPSegForImageSegmentation.from_pretrained(
-            pretrained_model_name_or_path,
-            *args,
-            **kwargs,
-        )
+        try:
+            model = CLIPSegForImageSegmentation.from_pretrained(
+                pretrained_model_name_or_path,
+                *args,
+                **kwargs,
+            )
+        except TypeError:
+            print(
+                "Unncessary arguments passed to `CLIPSegForImageSegmentation.from_pretrained`"
+            )
+            # Desperate attempt to load the moel any how
+            model = CLIPSegForImageSegmentation.from_pretrained(
+                pretrained_model_name_or_path
+            )
 
         if not isinstance(model, CLIPSegForImageSegmentation):
             msg = f"Expected `CLIPSegForImageSegmentation` from {pretrained_model_name_or_path}, got {type(model)}"
