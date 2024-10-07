@@ -157,3 +157,5 @@ configs/local/default.yaml
 
 # Output masks
 /output_masks
+*.npy
+*.db
